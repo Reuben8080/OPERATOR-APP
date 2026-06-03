@@ -132,6 +132,16 @@
     .btn-danger {
       background: #CC1111; color: #FAFAF8;
     }
+    
+    /* Disabled lock styling for the drift countdown state */
+    .btn-secondary:disabled {
+      background: rgba(0, 0, 0, 0.05) !important;
+      color: var(--text2) !important;
+      border-color: rgba(0, 0, 0, 0.1) !important;
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
 
     /* ——— INPUTS ——— */
     .input-field {
@@ -230,9 +240,9 @@
 
     /* ——— ESCALATION BOX ——— */
     .escalation-box {
-      background: var(--accent-light); border: 1px solid var(--border);
-      border-radius: 16px; padding: 20px;
-      transition: var(--trans);
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px;
+      transition: opacity 0.25s ease-in-out;
     }
     .escalation-text {
       font-family: 'Instrument Serif', serif; font-size: 18px;
@@ -382,29 +392,29 @@
       <div class="status-dot" id="active-dot"></div>
     </div>
 
-    <div class="flex1" style="display:flex; flex-direction:column; justify-content:space-between; position: relative;">
+    <div class="flex1" style="display:flex; flex-direction:column; justify-content:space-between;">
 
       <div>
         <div class="label">in progress</div>
         <div class="mt8 commitment-display" id="active-task"></div>
       </div>
 
-      <div style="text-align:center">
+      <div style="text-align:center; position: relative;">
         <div class="label">time remaining</div>
         <div class="mt8 timer-display" id="active-countdown" style="text-align:center"></div>
         <div class="progress-bar mt12">
           <div class="progress-fill" id="active-progress"></div>
         </div>
         <div class="mt8 label" id="active-subtext"></div>
+
+        <div class="escalation-box" id="active-escalation-box" style="display:none; position: absolute; top: 105%; left: 0; right: 0; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.06); opacity: 0;">
+          <div class="label" style="margin-bottom:6px; color: var(--accent);">// override signal</div>
+          <div class="escalation-text" id="active-escalation-msg"></div>
+        </div>
       </div>
 
       <div style="min-height: 24px;">
         <div class="ghost-anchor" id="active-ghost"></div>
-      </div>
-
-      <div class="escalation-box" id="active-escalation-box" style="display:none; position: absolute; bottom: 44px; left: 0; right: 0; z-index: 10; box-shadow: 0 -8px 24px rgba(0,0,0,0.02);">
-        <div class="label" style="margin-bottom:8px">// override signal</div>
-        <div class="escalation-text" id="active-escalation-msg"></div>
       </div>
 
     </div>
@@ -487,7 +497,7 @@
         <div class="mt8 big-text serif" id="missed-text">This is what drift looks like.</div>
       </div>
 
-      <div class="escalation-box">
+      <div class="escalation-box" style="opacity: 1;">
         <div class="escalation-text" id="missed-anchor"></div>
       </div>
 
@@ -513,17 +523,19 @@ const S = {
   currentScreen: null,
   urgency: 0,
   timerInterval: null,
-  driftTimeout: null
+  driftTimeout: null,
+  driftLockInterval: null // Tracks button countdown ticks
 };
 
-// LocalStorage keys
+let currentUrgencyLevel = 0;
+let fadeTimeout = null;
+
 const KEYS = {
   profile: 'op_profile_v2',
   today: 'op_today_v2',
   history: 'op_history_v2',
 };
 
-// Load state
 function load() {
   try { S.profile = JSON.parse(localStorage.getItem(KEYS.profile)); } catch(e) { S.profile = null; }
   try { S.today = JSON.parse(localStorage.getItem(KEYS.today)); } catch(e) { S.today = null; }
@@ -556,12 +568,23 @@ function getStreak() {
 // SCREEN ROUTING
 // =====================================================
 
+function resetDriftButtonState() {
+  if (S.driftLockInterval) { clearInterval(S.driftLockInterval); S.driftLockInterval = null; }
+  const driftBtn = document.getElementById('drift-btn');
+  if (driftBtn) {
+    driftBtn.removeAttribute('disabled');
+    driftBtn.textContent = "I'm drifting — wake me up";
+  }
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
   S.currentScreen = id;
   if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
   if (S.driftTimeout) { clearTimeout(S.driftTimeout); S.driftTimeout = null; }
+  if (fadeTimeout) { clearTimeout(fadeTimeout); fadeTimeout = null; }
+  resetDriftButtonState();
 }
 
 function router() {
@@ -794,7 +817,6 @@ function renderObQuestion() {
     <div class="mt20">${inputHtml}</div>
   `;
 
-  // Attach dynamic event listener safely via event delegation to avoid whitescreen crash
   const chipsContainer = document.getElementById('ob-chips');
   if (chipsContainer) {
     chipsContainer.addEventListener('click', (e) => {
@@ -932,11 +954,8 @@ function openCommitment() {
 }
 
 // =====================================================
-// ACTIVE SCREEN — COUNTDOWN
+// ACTIVE SCREEN — EPHEMERAL TIMEOUT ANIMATIONS
 // =====================================================
-
-let lastEscalationMsg = '';
-let isDriftingActive = false;
 
 function refreshActiveScreen() {
   if (!S.today) return;
@@ -945,9 +964,54 @@ function refreshActiveScreen() {
   const ghost = getGhostText();
   if (ghost) ghostEl.textContent = `"${ghost}"`;
 
-  lastEscalationMsg = '';
-  isDriftingActive = false;
+  currentUrgencyLevel = 0;
+  const escBox = document.getElementById('active-escalation-box');
+  if (escBox) {
+    escBox.style.display = 'none';
+    escBox.style.opacity = '0';
+  }
+  resetDriftButtonState();
   startCountdown();
+}
+
+function showOverrideSignal(msg, autoTriggered = false) {
+  const escBox = document.getElementById('active-escalation-box');
+  const escMsg = document.getElementById('active-escalation-msg');
+  const driftBtn = document.getElementById('drift-btn');
+  if (!escBox || !escMsg) return;
+
+  escMsg.textContent = msg;
+  escBox.style.display = 'block';
+  escBox.offsetHeight; // Force layout pass reflow
+  escBox.style.opacity = '1';
+
+  if (S.driftTimeout) clearTimeout(S.driftTimeout);
+  if (fadeTimeout) clearTimeout(fadeTimeout);
+  if (S.driftLockInterval) clearInterval(S.driftLockInterval);
+
+  // If the user deliberately tapped "I'm Drifting", freeze the action
+  if (!autoTriggered && driftBtn) {
+    let timeLeft = 15;
+    driftBtn.setAttribute('disabled', 'true');
+    driftBtn.textContent = `Locked out (${timeLeft}s)`;
+
+    S.driftLockInterval = setInterval(() => {
+      timeLeft--;
+      if (timeLeft > 0) {
+        driftBtn.textContent = `Locked out (${timeLeft}s)`;
+      } else {
+        resetDriftButtonState();
+      }
+    }, 1000);
+  }
+
+  // Clamped strictly to stay visible for 15 seconds (15000ms)
+  S.driftTimeout = setTimeout(() => {
+    escBox.style.opacity = '0';
+    fadeTimeout = setTimeout(() => {
+      escBox.style.display = 'none';
+    }, 250);
+  }, 15000);
 }
 
 function startCountdown() {
@@ -965,14 +1029,14 @@ function startCountdown() {
     const progressEl = document.getElementById('active-progress');
     const subtextEl = document.getElementById('active-subtext');
     const escBox = document.getElementById('active-escalation-box');
-    const escMsg = document.getElementById('active-escalation-msg');
     const dot = document.getElementById('active-dot');
     const driftBtn = document.getElementById('drift-btn');
 
-    // TIME OVER EXPIRATION LOGIC PARADOX RESOLUTION
     if (remaining <= 0) {
       if (S.timerInterval) clearInterval(S.timerInterval);
       if (S.driftTimeout) clearTimeout(S.driftTimeout);
+      if (fadeTimeout) clearTimeout(fadeTimeout);
+      resetDriftButtonState();
       
       setUrgency(5);
       countEl.textContent = 'TIME';
@@ -983,16 +1047,17 @@ function startCountdown() {
         dot.classList.add('fast-pulse');
       }
       
-      // Immediately clear intervention logic because context has expired
-      if (escBox) escBox.style.display = 'none';
+      if (escBox) {
+        escBox.style.opacity = '0';
+        escBox.style.display = 'none';
+      }
       if (driftBtn) {
+        driftBtn.setAttribute('disabled', 'true');
         driftBtn.style.opacity = '0.3';
-        driftBtn.style.pointerEvents = 'none';
       }
       return;
     }
 
-    // Normal countdown processing state
     const urgency = calcUrgency(remaining, totalMs);
     setUrgency(urgency);
 
@@ -1017,17 +1082,13 @@ function startCountdown() {
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
-    // Handle standard urgency escalations safely without flickering or clearing out prematurely
-    if (!isDriftingActive) {
+    if (urgency > currentUrgencyLevel) {
+      currentUrgencyLevel = urgency;
       if (urgency >= 1) {
-        if (!lastEscalationMsg) {
-          lastEscalationMsg = getEscalationMsg(urgency);
-        }
-        if (escBox) escBox.style.display = 'block';
-        if (escMsg) escMsg.textContent = lastEscalationMsg;
-      } else {
-        if (escBox) escBox.style.display = 'none';
+        showOverrideSignal(getEscalationMsg(urgency), true);
       }
+    } else if (urgency < currentUrgencyLevel) {
+      currentUrgencyLevel = urgency;
     }
   }
 
@@ -1042,48 +1103,16 @@ function markDone() {
   save(KEYS.today, S.today);
   if (S.timerInterval) clearInterval(S.timerInterval);
   if (S.driftTimeout) clearTimeout(S.driftTimeout);
+  if (fadeTimeout) clearTimeout(fadeTimeout);
+  resetDriftButtonState();
   setUrgency(0);
   router();
 }
 
 function triggerWakeup() {
-  // Guard clause against clicking if the task has expired
   if (S.today && (new Date() > new Date(S.today.deadlineTime))) return;
-
-  isDriftingActive = true;
   const currentLevel = Math.max(1, S.urgency);
-  const wakeUpMsg = getEscalationMsg(currentLevel);
-  
-  const escMsg = document.getElementById('active-escalation-msg');
-  const escBox = document.getElementById('active-escalation-box');
-  
-  if (escMsg) escMsg.textContent = wakeUpMsg;
-  if (escBox) { 
-    escBox.style.display = 'block'; 
-    escBox.style.animation = 'none';
-    escBox.offsetHeight; // trigger reflow
-    escBox.style.animation = 'fadeIn 0.4s ease'; 
-  }
-
-  if (S.driftTimeout) clearTimeout(S.driftTimeout);
-  
-  // Stays fixed on screen for exactly 10 full seconds to prevent fast fading
-  S.driftTimeout = setTimeout(() => {
-    isDriftingActive = false;
-    // Fall back naturally back onto the core loop calculations
-    const now = new Date();
-    const deadline = new Date(S.today.deadlineTime);
-    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
-    const rem = deadline - now;
-    const currentUrgency = calcUrgency(rem, deadline - start);
-    
-    if (currentUrgency < 1) {
-      if (escBox) escBox.style.display = 'none';
-    } else {
-      lastEscalationMsg = getEscalationMsg(currentUrgency);
-      if (escMsg) escMsg.textContent = lastEscalationMsg;
-    }
-  }, 10000);
+  showOverrideSignal(getEscalationMsg(currentLevel), false);
 }
 
 // =====================================================
@@ -1193,19 +1222,11 @@ document.getElementById('commit-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitCommit(); }
 });
 
-// =====================================================
-// SERVICE WORKER
-// =====================================================
-
 if (typeof navigator.serviceWorker !== 'undefined') {
   navigator.serviceWorker.register('sw.js').catch(function(err) {
     console.log("Service worker registration skipped or unavailable.");
   });
 }
-
-// =====================================================
-// BOOT
-// =====================================================
 
 router();
 </script>
