@@ -557,7 +557,8 @@ function getStreak() {
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-' + id).classList.add('active');
+  const screenEl = document.getElementById('screen-' + id);
+  if (screenEl) screenEl.classList.add('active');
   S.currentScreen = id;
   if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
   if (S.driftTimeout) { clearTimeout(S.driftTimeout); S.driftTimeout = null; }
@@ -639,19 +640,20 @@ function addHistory(entry) {
 }
 
 // =====================================================
-// URGENCY ENGINE
+// URGENCY ENGINE (Proportional Ratio Adjustments)
 // =====================================================
 
 function calcUrgency(msRemaining, totalMs) {
   if (!S.today || !S.today.started) return 0;
   if (msRemaining <= 0) return 5;
-  const pct = msRemaining / totalMs;
-  if (pct > 0.75) return 0;
-  if (pct > 0.5) return 1;
-  if (pct > 0.25) return 2;
-  if (msRemaining > 30 * 60 * 1000) return 3;
-  if (msRemaining > 0) return 4;
-  return 5;
+
+  const pctLeft = msRemaining / totalMs;
+
+  if (pctLeft > 0.75) return 0; // Level 0: Safe zone
+  if (pctLeft > 0.41) return 1; // Level 1: Pattern Disruption (45m/60m equivalent)
+  if (pctLeft > 0.25) return 2; // Level 2: Stakes Confrontation (25m/60m equivalent)
+  if (pctLeft > 0.11) return 3; // Level 3: Tactical Shock (15m/60m equivalent)
+  return 4;                     // Level 4: Pure Ultimatum (7m down to 0m equivalent)
 }
 
 function setUrgency(level) {
@@ -659,52 +661,226 @@ function setUrgency(level) {
   S.urgency = level;
   document.body.setAttribute('data-urgency', level);
   const colors = ['#FAFAF8','#FFF8EE','#FFE8D0','#FF4420','#8B0000','#080808'];
-  document.getElementById('tc').setAttribute('content', colors[level] || '#FAFAF8');
-}
-
-// =====================================================
-// PERSONALIZED ESCALATION MESSAGES
-// =====================================================
-
-function getEscalationMsg(urgency) {
-  if (!S.profile) return "Clock's running.";
-  const p = S.profile;
-  const msgs = {
-    1: [
-      `You set this last night. That version of you was right.`,
-      `Halfway there. The boring middle is exactly where it went wrong before.`,
-      p.stakes ? `Think about ${p.stakes}. This is for them.` : `Clock at 50%. This is the moment you usually find a reason to defer.`,
-    ],
-    2: [
-      p.drift ? `This is how "${p.drift}" started.` : `Recognize this feeling? You've been here before.`,
-      `The window is closing. Not slowly anymore.`,
-      p.stakes ? `${p.stakes} — that's what's on the line. Not points. Not a streak.` : `Time is running. This is real.`,
-    ],
-    3: [
-      p.drift ? `"${p.drift}" — one word. That's what today becomes if you don't move now.` : `One hour left. Move.`,
-      `This is the exact moment you've let slip before. Not this time.`,
-      p.stakes ? `${p.stakes} is watching in your head. What do you tell them?` : `This is not the version of you that quits.`,
-    ],
-    4: [
-      p.drift ? `You said you'd never repeat "${p.drift}". Today decides.` : `Last chance. No softening.`,
-      p.forward ? `Five years from now — "${p.forward}" — this moment matters.` : `This is where it counts. Right now.`,
-      `The glyph is full. The story you tell tomorrow starts in the next ten minutes.`,
-    ],
-    5: [
-      p.drift ? `"${p.drift}" — that's in the past. Today doesn't have to be.` : `The day ended. Tomorrow is blank.`,
-      p.forward ? `The version of you who reaches "${p.forward}" didn't miss many days. Just most.` : `Not finished. Not yet.`,
-      `This isn't judgement. This is just what the data says. You know what to do tomorrow.`,
-    ],
-  };
-
-  const arr = msgs[urgency] || [`Keep going.`];
-  return arr[Math.floor(Math.random() * arr.length)];
+  const tcEl = document.getElementById('tc');
+  if (tcEl) tcEl.setAttribute('content', colors[level] || '#FAFAF8');
 }
 
 function getGhostText() {
   if (!S.profile) return '';
   const p = S.profile;
   return p.forward || p.stakes || p.drift || '';
+}
+
+// =====================================================
+// ACTIVE SCREEN — COUNTDOWN & ESCALATION BUILD
+// =====================================================
+
+let lastUrgencyLevel = -1;
+let lastEscalationMsg = '';
+let isDriftingActive = false;
+
+function refreshActiveScreen() {
+  if (!S.today) return;
+  
+  const activeTaskEl = document.getElementById('active-task');
+  if (activeTaskEl) activeTaskEl.textContent = `"${S.today.task}"`;
+  
+  const ghostEl = document.getElementById('active-ghost');
+  const ghost = getGhostText();
+  if (ghost && ghostEl) ghostEl.textContent = `"${ghost}"`;
+
+  lastUrgencyLevel = -1;
+  lastEscalationMsg = '';
+  isDriftingActive = false;
+  startCountdown();
+}
+
+function getEscalationMsg(urgency) {
+  if (!S.profile) return "Clock's running.";
+  const p = S.profile;
+  
+  const msgs = {
+    1: [
+      `This is the exact threshold where your day's momentum breaks. Snap out of it.`,
+      `Are you operating your day right now, or just spectating the countdown?`,
+      `Put down the secondary screens. Close the extra tabs. One clean line of execution now.`,
+      `Drifting starts small—a single non-essential click. Kill it before it compounds.`,
+      p && p.drift ? `You are running the exact sequence that leads to "${p.drift}". Break it.` : `Friction is the target. Pushing through this discomfort is the entire point.`
+    ],
+    2: [
+      p && p.drift ? `This is how "${p.drift}" always starts. Look at your hands.` : `Recognize this feeling? You have stood right on this failure line before.`,
+      `The window is closing. Not slowly anymore. Wake up.`,
+      p && p.stakes ? `${p.stakes} is on the line. Not app points. Not a casual streak.` : `Time is bleeding out in real time. Move now.`,
+      `Take one deep breath, close your eyes for three seconds, open them, and execute.`,
+      p && p.forward ? `The version of you who achieves "${p.forward}" is earned in this exact minute.` : `No one is coming to salvage this afternoon. This hour is entirely on you.`
+    ],
+    3: [
+      p && p.drift ? `"${p.drift}"—that's what today becomes if you don't break the pattern now.` : `Crunch time. Drop the excuses and change your posture.`,
+      `Your brain is actively hunting for an escape hatch. Seal it off entirely.`,
+      `Look back at your commitment text. Do your actions match it, or are you negotiating?`,
+      `Strip away all perfectionism. Give me a terrible, messy first chunk of work. Just move.`,
+      `Action precedes motivation. Do not wait until you 'feel' like finishing this.`
+    ],
+    4: [
+      p && p.drift ? `You swore you wouldn't repeat "${p.drift}". Today decides if that was true.` : `Last clear chance. No softening, no deferring.`,
+      p && p.forward ? `Five years from now—"${p.forward}"—this exact block of resistance matters.` : `This is where it actually counts. Right here, right now.`,
+      `Ten minutes of raw focus can still salvage this entire commitment. Go savage mode.`,
+      `Do not let this clock hit zero while you are standing completely still.`,
+      p && p.stakes ? `If everything depended on finishing this for ${p.stakes}, what is your next exact move?` : `Minutes remaining. Do not surrender this day to the drift.`
+    ],
+    5: [
+      p && p.drift ? `"${p.drift}" won today. Own it, look at it, and ensure it fails tomorrow.` : `The window has closed. The day is officially uncompleted.`,
+      p && p.forward ? `The person who reaches "${p.forward}" didn't drop blocks like this.` : `Execution failed. Stop hiding from the screen.`,
+      `This isn't judgment; it's raw data. Look at the text, accept the drop, reset the loop.`,
+      `Tomorrow's clarity is bought entirely with today's completely honest assessment.`
+    ],
+  };
+
+  const arr = msgs[urgency] || [`Keep moving.`];
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function startCountdown() {
+  if (S.timerInterval) clearInterval(S.timerInterval);
+
+  function tick() {
+    if (!S.today) return;
+    const now = new Date();
+    const deadline = new Date(S.today.deadlineTime);
+    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
+    const totalMs = deadline - start;
+    const remaining = deadline - now;
+
+    const countEl = document.getElementById('active-countdown');
+    const progressEl = document.getElementById('active-progress');
+    const subtextEl = document.getElementById('active-subtext');
+    const escBox = document.getElementById('active-escalation-box');
+    const escMsg = document.getElementById('active-escalation-msg');
+    const dot = document.getElementById('active-dot');
+    const driftBtn = document.getElementById('drift-btn');
+
+    if (remaining <= 0) {
+      if (S.timerInterval) clearInterval(S.timerInterval);
+      if (S.driftTimeout) clearTimeout(S.driftTimeout);
+      
+      setUrgency(5);
+      if (countEl) countEl.textContent = 'TIME';
+      if (subtextEl) subtextEl.textContent = 'time is up';
+      if (progressEl) progressEl.style.width = '100%';
+      
+      if (dot) {
+        dot.classList.remove('pulsing');
+        dot.classList.add('fast-pulse');
+      }
+      
+      if (escBox) {
+        escBox.style.transition = 'none';
+        escBox.style.display = 'none';
+      }
+      if (driftBtn) {
+        driftBtn.style.opacity = '0.3';
+        driftBtn.style.pointerEvents = 'none';
+      }
+      return;
+    }
+
+    const urgency = calcUrgency(remaining, totalMs);
+    setUrgency(urgency);
+
+    if (urgency !== lastUrgencyLevel) {
+      lastUrgencyLevel = urgency;
+      if (!isDriftingActive) {
+        lastEscalationMsg = '';
+      }
+    }
+
+    if (countEl) {
+      const h = Math.floor(remaining / 3600000);
+      const min = Math.floor((remaining % 3600000) / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      if (h > 0) {
+        countEl.textContent = `${h}h ${String(min).padStart(2,'0')}m`;
+      } else {
+        countEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+      }
+    }
+
+    const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
+    if (progressEl) progressEl.style.width = pct + '%';
+
+    const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
+    if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
+
+    if (dot) {
+      dot.classList.remove('pulsing', 'fast-pulse');
+      if (urgency >= 4) dot.classList.add('fast-pulse');
+      else if (urgency >= 2) dot.classList.add('pulsing');
+    }
+
+    if (!isDriftingActive) {
+      if (urgency >= 1) {
+        if (!lastEscalationMsg) {
+          lastEscalationMsg = getEscalationMsg(urgency);
+        }
+        if (escBox) {
+          escBox.style.display = 'block';
+          escBox.style.transition = 'var(--trans)';
+        }
+        if (escMsg) escMsg.textContent = lastEscalationMsg;
+      } else {
+        if (escBox) escBox.style.display = 'none';
+      }
+    }
+  }
+
+  tick();
+  S.timerInterval = setInterval(tick, 1000);
+}
+
+function triggerWakeup() {
+  if (S.today && (new Date() > new Date(S.today.deadlineTime))) return;
+
+  isDriftingActive = true;
+  const currentLevel = Math.max(1, S.urgency);
+  
+  const wakeUpMsg = getEscalationMsg(currentLevel);
+  lastEscalationMsg = wakeUpMsg;
+  
+  const escMsg = document.getElementById('active-escalation-msg');
+  const escBox = document.getElementById('active-escalation-box');
+  
+  if (escMsg) escMsg.textContent = wakeUpMsg;
+  if (escBox) { 
+    escBox.style.display = 'block'; 
+    escBox.style.transition = 'none'; 
+    escBox.style.opacity = '1';       
+    escBox.style.animation = 'none';
+    escBox.offsetHeight;               
+    escBox.style.animation = 'fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'; 
+  }
+
+  if (S.driftTimeout) clearTimeout(S.driftTimeout);
+  
+  S.driftTimeout = setTimeout(() => {
+    isDriftingActive = false;
+    
+    const now = new Date();
+    const deadline = new Date(S.today.deadlineTime);
+    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
+    const rem = deadline - now;
+    const currentUrgency = calcUrgency(rem, deadline - start);
+    
+    if (currentUrgency < 1) {
+      if (escBox) {
+        escBox.style.transition = 'none';
+        escBox.style.display = 'none';
+      }
+    } else {
+      if (escBox) escBox.style.transition = 'var(--trans)'; 
+      lastEscalationMsg = getEscalationMsg(currentUrgency);
+      if (escMsg) escMsg.textContent = lastEscalationMsg;
+    }
+  }, 12000); 
 }
 
 // =====================================================
@@ -760,6 +936,7 @@ function initOnboarding() {
 
 function renderObDots() {
   const container = document.getElementById('ob-dots');
+  if (!container) return;
   container.innerHTML = '';
   OB_QUESTIONS.forEach((q, i) => {
     const d = document.createElement('div');
@@ -773,7 +950,7 @@ function renderObQuestion() {
   const q = OB_QUESTIONS[obStep];
   const container = document.getElementById('ob-questions');
   const backBtn = document.getElementById('ob-back-btn');
-  backBtn.style.display = obStep > 0 ? 'flex' : 'none';
+  if (backBtn) backBtn.style.display = obStep > 0 ? 'flex' : 'none';
 
   let inputHtml = '';
   if (q.type === 'textarea') {
@@ -786,14 +963,15 @@ function renderObQuestion() {
     </div>`;
   }
 
-  container.innerHTML = `
-    <div class="label q-step">${obStep + 1} / ${OB_QUESTIONS.length}</div>
-    <div class="mt12 big-text serif" style="font-size:clamp(22px,5vw,28px)">${q.question}</div>
-    <div class="mt8 label">${q.sub}</div>
-    <div class="mt20">${inputHtml}</div>
-  `;
+  if (container) {
+    container.innerHTML = `
+      <div class="label q-step">${obStep + 1} / ${OB_QUESTIONS.length}</div>
+      <div class="mt12 big-text serif" style="font-size:clamp(22px,5vw,28px)">${q.question}</div>
+      <div class="mt8 label">${q.sub}</div>
+      <div class="mt20">${inputHtml}</div>
+    `;
+  }
 
-  // Attach dynamic event listener safely via event delegation to avoid whitescreen crash
   const chipsContainer = document.getElementById('ob-chips');
   if (chipsContainer) {
     chipsContainer.addEventListener('click', (e) => {
@@ -812,7 +990,7 @@ function renderObQuestion() {
   }, 300);
 
   const nextBtn = document.getElementById('ob-next-btn');
-  nextBtn.textContent = obStep < OB_QUESTIONS.length - 1 ? 'Continue →' : 'Build my profile →';
+  if (nextBtn) nextBtn.textContent = obStep < OB_QUESTIONS.length - 1 ? 'Continue →' : 'Build my profile →';
 }
 
 function obNext() {
@@ -821,9 +999,11 @@ function obNext() {
   if (inp) obAnswers[q.key] = inp.value.trim();
 
   if ((q.type === 'text' || q.type === 'textarea') && !obAnswers[q.key]) {
-    inp.style.borderColor = 'var(--accent)';
-    inp.placeholder = 'This one matters — take a moment.';
-    inp.focus();
+    if (inp) {
+      inp.style.borderColor = 'var(--accent)';
+      inp.placeholder = 'This one matters — take a moment.';
+      inp.focus();
+    }
     return;
   }
   if ((q.type === 'select' || q.type === 'chips') && !obAnswers[q.key]) {
@@ -866,17 +1046,24 @@ function obBack() {
 
 function refreshCommitScreen() {
   const streak = getStreak();
-  document.getElementById('streak-commit').textContent = streak > 0 ? `${streak} day streak` : '—';
+  const commitBadge = document.getElementById('streak-commit');
+  if (commitBadge) commitBadge.textContent = streak > 0 ? `${streak} day streak` : '—';
 }
 
 function submitCommit() {
-  const task = document.getElementById('commit-text').value.trim();
-  const timeVal = document.getElementById('commit-time').value || '17:00';
-  const witness = document.getElementById('commit-witness').value.trim();
+  const taskTextEl = document.getElementById('commit-text');
+  const timeInputEl = document.getElementById('commit-time');
+  const witnessEl = document.getElementById('commit-witness');
+
+  const task = taskTextEl ? taskTextEl.value.trim() : '';
+  const timeVal = timeInputEl ? (timeInputEl.value || '17:00') : '17:00';
+  const witness = witnessEl ? witnessEl.value.trim() : '';
 
   if (!task) {
-    document.getElementById('commit-text').focus();
-    document.getElementById('commit-text').placeholder = 'Write the one thing. Be specific.';
+    if (taskTextEl) {
+      taskTextEl.focus();
+      taskTextEl.placeholder = 'Write the one thing. Be specific.';
+    }
     return;
   }
 
@@ -902,8 +1089,8 @@ function submitCommit() {
   };
 
   save(KEYS.today, S.today);
-  document.getElementById('commit-text').value = '';
-  document.getElementById('commit-witness').value = '';
+  if (taskTextEl) taskTextEl.value = '';
+  if (witnessEl) witnessEl.value = '';
   router();
 }
 
@@ -913,12 +1100,17 @@ function submitCommit() {
 
 function refreshMorningScreen() {
   if (!S.today) return;
-  document.getElementById('morning-task').textContent = `"${S.today.task}"`;
+  
+  const mTaskEl = document.getElementById('morning-task');
+  if (mTaskEl) mTaskEl.textContent = `"${S.today.task}"`;
+  
   const dl = new Date(S.today.deadlineTime);
-  document.getElementById('morning-deadline').textContent = dl.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const mDeadEl = document.getElementById('morning-deadline');
+  if (mDeadEl) mDeadEl.textContent = dl.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  
   const ghost = getGhostText();
   const ghostEl = document.getElementById('morning-ghost');
-  if (ghost) ghostEl.textContent = `"${ghost}"`;
+  if (ghost && ghostEl) ghostEl.textContent = `"${ghost}"`;
   setUrgency(0);
 }
 
@@ -930,110 +1122,6 @@ function openCommitment() {
   router();
 }
 
-// =====================================================
-// ACTIVE SCREEN — COUNTDOWN
-// =====================================================
-
-let lastEscalationMsg = '';
-let isDriftingActive = false;
-
-function refreshActiveScreen() {
-  if (!S.today) return;
-  document.getElementById('active-task').textContent = `"${S.today.task}"`;
-  const ghostEl = document.getElementById('active-ghost');
-  const ghost = getGhostText();
-  if (ghost) ghostEl.textContent = `"${ghost}"`;
-
-  lastEscalationMsg = '';
-  isDriftingActive = false;
-  startCountdown();
-}
-
-function startCountdown() {
-  if (S.timerInterval) clearInterval(S.timerInterval);
-
-  function tick() {
-    if (!S.today) return;
-    const now = new Date();
-    const deadline = new Date(S.today.deadlineTime);
-    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
-    const totalMs = deadline - start;
-    const remaining = deadline - now;
-
-    const countEl = document.getElementById('active-countdown');
-    const progressEl = document.getElementById('active-progress');
-    const subtextEl = document.getElementById('active-subtext');
-    const escBox = document.getElementById('active-escalation-box');
-    const escMsg = document.getElementById('active-escalation-msg');
-    const dot = document.getElementById('active-dot');
-    const driftBtn = document.getElementById('drift-btn');
-
-    // TIME OVER EXPIRATION LOGIC PARADOX RESOLUTION
-    if (remaining <= 0) {
-      if (S.timerInterval) clearInterval(S.timerInterval);
-      if (S.driftTimeout) clearTimeout(S.driftTimeout);
-      
-      setUrgency(5);
-      countEl.textContent = 'TIME';
-      if (subtextEl) subtextEl.textContent = 'time is up';
-      if (progressEl) progressEl.style.width = '100%';
-      if (dot) {
-        dot.classList.remove('pulsing');
-        dot.classList.add('fast-pulse');
-      }
-      
-      // Immediately clear intervention logic because context has expired
-      if (escBox) escBox.style.display = 'none';
-      if (driftBtn) {
-        driftBtn.style.opacity = '0.3';
-        driftBtn.style.pointerEvents = 'none';
-      }
-      return;
-    }
-
-    // Normal countdown processing state
-    const urgency = calcUrgency(remaining, totalMs);
-    setUrgency(urgency);
-
-    const h = Math.floor(remaining / 3600000);
-    const min = Math.floor((remaining % 3600000) / 60000);
-    const sec = Math.floor((remaining % 60000) / 1000);
-    if (h > 0) {
-      countEl.textContent = `${h}h ${String(min).padStart(2,'0')}m`;
-    } else {
-      countEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-    }
-
-    const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
-    if (progressEl) progressEl.style.width = pct + '%';
-
-    const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
-    if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
-
-    if (dot) {
-      dot.classList.remove('pulsing', 'fast-pulse');
-      if (urgency >= 4) dot.classList.add('fast-pulse');
-      else if (urgency >= 2) dot.classList.add('pulsing');
-    }
-
-    // Handle standard urgency escalations safely without flickering or clearing out prematurely
-    if (!isDriftingActive) {
-      if (urgency >= 1) {
-        if (!lastEscalationMsg) {
-          lastEscalationMsg = getEscalationMsg(urgency);
-        }
-        if (escBox) escBox.style.display = 'block';
-        if (escMsg) escMsg.textContent = lastEscalationMsg;
-      } else {
-        if (escBox) escBox.style.display = 'none';
-      }
-    }
-  }
-
-  tick();
-  S.timerInterval = setInterval(tick, 1000);
-}
-
 function markDone() {
   if (!S.today) return;
   S.today.completed = true;
@@ -1043,46 +1131,6 @@ function markDone() {
   if (S.driftTimeout) clearTimeout(S.driftTimeout);
   setUrgency(0);
   router();
-}
-
-function triggerWakeup() {
-  // Guard clause against clicking if the task has expired
-  if (S.today && (new Date() > new Date(S.today.deadlineTime))) return;
-
-  isDriftingActive = true;
-  const currentLevel = Math.max(1, S.urgency);
-  const wakeUpMsg = getEscalationMsg(currentLevel);
-  
-  const escMsg = document.getElementById('active-escalation-msg');
-  const escBox = document.getElementById('active-escalation-box');
-  
-  if (escMsg) escMsg.textContent = wakeUpMsg;
-  if (escBox) { 
-    escBox.style.display = 'block'; 
-    escBox.style.animation = 'none';
-    escBox.offsetHeight; // trigger reflow
-    escBox.style.animation = 'fadeIn 0.4s ease'; 
-  }
-
-  if (S.driftTimeout) clearTimeout(S.driftTimeout);
-  
-  // Stays fixed on screen for exactly 10 full seconds to prevent fast fading
-  S.driftTimeout = setTimeout(() => {
-    isDriftingActive = false;
-    // Fall back naturally back onto the core loop calculations
-    const now = new Date();
-    const deadline = new Date(S.today.deadlineTime);
-    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
-    const rem = deadline - now;
-    const currentUrgency = calcUrgency(rem, deadline - start);
-    
-    if (currentUrgency < 1) {
-      if (escBox) escBox.style.display = 'none';
-    } else {
-      lastEscalationMsg = getEscalationMsg(currentUrgency);
-      if (escMsg) escMsg.textContent = lastEscalationMsg;
-    }
-  }, 10000);
 }
 
 // =====================================================
@@ -1102,12 +1150,16 @@ function refreshCompleteScreen() {
   } else {
     label = 'After deadline — still counts.';
   }
-  document.getElementById('complete-time-label').textContent = label;
+  const timeLabelEl = document.getElementById('complete-time-label');
+  if (timeLabelEl) timeLabelEl.textContent = label;
 }
 
 function closeDay() {
-  const ref = document.getElementById('complete-reflection').value.trim();
-  const block = document.getElementById('complete-blocker').value.trim();
+  const refEl = document.getElementById('complete-reflection');
+  const blockEl = document.getElementById('complete-blocker');
+  const ref = refEl ? refEl.value.trim() : '';
+  const block = blockEl ? blockEl.value.trim() : '';
+  
   if (!S.today) return;
   S.today.reflection = ref;
   S.today.blocker = block;
@@ -1124,16 +1176,23 @@ function closeDay() {
 function refreshClosedScreen() {
   if (!S.today) return;
   const streak = getStreak();
-  document.getElementById('streak-closed').textContent = `${streak} day streak`;
-  const hour = new Date().getHours();
+  const closedBadge = document.getElementById('streak-closed');
+  if (closedBadge) closedBadge.textContent = `${streak} day streak`;
+  
   const msgs = ['Sharp execution.', 'That\'s how it\'s done.', 'Good work.', 'Locked in.', 'Consistent.'];
-  document.getElementById('closed-msg').textContent = msgs[streak % msgs.length];
-  document.getElementById('closed-summary').innerHTML = `
-    <div class="label">what you did</div>
-    <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${S.today.task}"</div>
-    ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${S.today.reflection}</div>` : ''}
-  `;
-  document.getElementById('tomorrow-time').textContent = '10:00 PM';
+  const closedMsgEl = document.getElementById('closed-msg');
+  if (closedMsgEl) closedMsgEl.textContent = msgs[streak % msgs.length];
+  
+  const summaryEl = document.getElementById('closed-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="label">what you did</div>
+      <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${S.today.task}"</div>
+      ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${S.today.reflection}</div>` : ''}
+    `;
+  }
+  const tomTimeEl = document.getElementById('tomorrow-time');
+  if (tomTimeEl) tomTimeEl.textContent = '10:00 PM';
 }
 
 // =====================================================
@@ -1143,13 +1202,17 @@ function refreshClosedScreen() {
 function refreshMissedScreen() {
   setUrgency(5);
   const ghost = getGhostText();
-  if (ghost) {
-    document.getElementById('missed-ghost').textContent = `"${ghost}"`;
+  const ghostEl = document.getElementById('missed-ghost');
+  if (ghost && ghostEl) {
+    ghostEl.textContent = `"${ghost}"`;
   }
-  document.getElementById('missed-anchor').textContent = getEscalationMsg(5);
+  const anchorEl = document.getElementById('missed-anchor');
+  if (anchorEl) anchorEl.textContent = getEscalationMsg(5);
+  
   const task = S.today ? S.today.task : '';
-  if (task) {
-    document.getElementById('missed-text').textContent = `"${task}" — not today.`;
+  const missedTextEl = document.getElementById('missed-text');
+  if (task && missedTextEl) {
+    missedTextEl.textContent = `"${task}" — not today.`;
   }
 }
 
