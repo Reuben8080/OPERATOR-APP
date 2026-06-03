@@ -129,9 +129,6 @@
       background: transparent; color: var(--text2);
       transition: color 1.8s ease;
     }
-    .btn-danger {
-      background: #CC1111; color: #FAFAF8;
-    }
 
     /* ——— INPUTS ——— */
     .input-field {
@@ -156,12 +153,12 @@
 
     /* ——— SPACERS ——— */
     .flex1 { flex: 1; }
+    .mt4 { margin-top: 4px; }
     .mt8 { margin-top: 8px; }
     .mt12 { margin-top: 12px; }
     .mt16 { margin-top: 16px; }
     .mt20 { margin-top: 20px; }
     .mt28 { margin-top: 28px; }
-    .mt40 { margin-top: 40px; }
     .gap8 { display: flex; flex-direction: column; gap: 8px; }
     .gap12 { display: flex; flex-direction: column; gap: 12px; }
     .gap16 { display: flex; flex-direction: column; gap: 16px; }
@@ -244,7 +241,7 @@
     .ghost-anchor {
       font-family: 'Instrument Serif', serif; font-size: 14px;
       color: var(--text2); font-style: italic; line-height: 1.6;
-      transition: color 1.8s ease; opacity: 0;
+      opacity: 0;
       transition: opacity 1s ease, color 1.8s ease;
     }
     [data-urgency="3"] .ghost-anchor,
@@ -399,7 +396,7 @@
       </div>
 
       <div>
-        <div class="escalation-box" id="active-escalation-box" style="display:none">
+        <div class="escalation-box" id="active-escalation-box" style="display:none;">
           <div class="label" style="margin-bottom:8px">// override signal</div>
           <div class="escalation-text" id="active-escalation-msg"></div>
         </div>
@@ -515,14 +512,12 @@ const S = {
   driftTimeout: null
 };
 
-// LocalStorage keys
 const KEYS = {
   profile: 'op_profile_v2',
   today: 'op_today_v2',
   history: 'op_history_v2',
 };
 
-// Load state
 function load() {
   try { S.profile = JSON.parse(localStorage.getItem(KEYS.profile)); } catch(e) { S.profile = null; }
   try { S.today = JSON.parse(localStorage.getItem(KEYS.today)); } catch(e) { S.today = null; }
@@ -539,8 +534,7 @@ function getHistory() {
 function getStreak() {
   const h = getHistory();
   let streak = 0;
-  const today = new Date().toDateString();
-  const sorted = h.filter(d => d.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
+  const sorted = h.filter(d => d && d.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
   for (let i = 0; i < sorted.length; i++) {
     const d = new Date(sorted[i].date);
     const expected = new Date();
@@ -649,11 +643,11 @@ function calcUrgency(msRemaining, totalMs) {
 
   const pctLeft = msRemaining / totalMs;
 
-  if (pctLeft > 0.75) return 0; // Level 0: Safe zone
-  if (pctLeft > 0.41) return 1; // Level 1: Pattern Disruption (45m/60m equivalent)
-  if (pctLeft > 0.25) return 2; // Level 2: Stakes Confrontation (25m/60m equivalent)
-  if (pctLeft > 0.11) return 3; // Level 3: Tactical Shock (15m/60m equivalent)
-  return 4;                     // Level 4: Pure Ultimatum (7m down to 0m equivalent)
+  if (pctLeft > 0.75) return 0; 
+  if (pctLeft > 0.41) return 1; 
+  if (pctLeft > 0.25) return 2; 
+  if (pctLeft > 0.11) return 3; 
+  return 4;                     
 }
 
 function setUrgency(level) {
@@ -672,7 +666,7 @@ function getGhostText() {
 }
 
 // =====================================================
-// ACTIVE SCREEN — COUNTDOWN & ESCALATION BUILD
+// ACTIVE SCREEN — COUNTDOWN & FIXES
 // =====================================================
 
 let lastUrgencyLevel = -1;
@@ -817,6 +811,7 @@ function startCountdown() {
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
+    // Natural update routine runs ONLY if manual tracking is inactive
     if (!isDriftingActive) {
       if (urgency >= 1) {
         if (!lastEscalationMsg) {
@@ -825,10 +820,16 @@ function startCountdown() {
         if (escBox) {
           escBox.style.display = 'block';
           escBox.style.transition = 'var(--trans)';
+          escBox.style.opacity = '1';
         }
-        if (escMsg) escMsg.textContent = lastEscalationMsg;
+        if (escMsg && escMsg.textContent !== lastEscalationMsg) {
+          escMsg.textContent = lastEscalationMsg;
+        }
       } else {
-        if (escBox) escBox.style.display = 'none';
+        if (escBox) {
+          escBox.style.display = 'none';
+          escBox.style.opacity = '0';
+        }
       }
     }
   }
@@ -852,17 +853,19 @@ function triggerWakeup() {
   if (escMsg) escMsg.textContent = wakeUpMsg;
   if (escBox) { 
     escBox.style.display = 'block'; 
-    escBox.style.transition = 'none'; 
+    escBox.style.transition = 'none'; // Overrides CSS transition engine instantly
     escBox.style.opacity = '1';       
-    escBox.style.animation = 'none';
-    escBox.offsetHeight;               
-    escBox.style.animation = 'fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'; 
+    escBox.style.transform = 'scale(1.02)';
+    escBox.offsetHeight; // Forces a clean layout flow reset
+    setTimeout(() => { escBox.style.transform = 'scale(1)'; }, 100);
   }
 
   if (S.driftTimeout) clearTimeout(S.driftTimeout);
   
+  // Rigid 30-Second Disruption Window
   S.driftTimeout = setTimeout(() => {
     isDriftingActive = false;
+    lastEscalationMsg = ''; // Force resets the loop engine string cache
     
     const now = new Date();
     const deadline = new Date(S.today.deadlineTime);
@@ -874,13 +877,14 @@ function triggerWakeup() {
       if (escBox) {
         escBox.style.transition = 'none';
         escBox.style.display = 'none';
+        escBox.style.opacity = '0';
       }
     } else {
       if (escBox) escBox.style.transition = 'var(--trans)'; 
       lastEscalationMsg = getEscalationMsg(currentUrgency);
       if (escMsg) escMsg.textContent = lastEscalationMsg;
     }
-  }, 12000); 
+  }, 30000); 
 }
 
 // =====================================================
