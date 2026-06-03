@@ -76,7 +76,6 @@
     .mono { font-family: 'DM Mono', monospace; }
 
     .label {
-      display: block;
       font-size: 10px; letter-spacing: 0.2em;
       text-transform: uppercase; color: var(--text2);
       font-weight: 500; transition: color 1.8s ease;
@@ -109,8 +108,10 @@
     .btn {
       display: flex; align-items: center; justify-content: center;
       padding: 18px 28px; border-radius: 14px;
-      font-family: 'Instrument Serif', serif; font-size: 21px;
-      font-style: italic; font-weight: 400;
+      font-family: 'Instrument Serif', serif; 
+      font-style: italic;
+      font-size: 19px;
+      font-weight: 500; letter-spacing: 0.02em;
       cursor: pointer; border: none; outline: none;
       transition: all 0.2s ease; -webkit-appearance: none;
       width: 100%;
@@ -157,7 +158,6 @@
 
     /* ——— SPACERS ——— */
     .flex1 { flex: 1; }
-    .mt4 { margin-top: 4px; }
     .mt8 { margin-top: 8px; }
     .mt12 { margin-top: 12px; }
     .mt16 { margin-top: 16px; }
@@ -230,36 +230,31 @@
       border-color: var(--text);
     }
 
-    /* ——— ESCALATION GENERAL ——— */
+    /* ——— KINETIC SLIDE-AND-FADE ACCORDION ——— */
     .escalation-box {
-      background: var(--accent-light); border: 1px solid var(--border);
-      border-radius: 16px; padding: 20px;
-      transition: var(--trans);
+      background: var(--accent-light); 
+      border: 1px solid transparent;
+      border-radius: 16px; 
+      padding: 0 20px;
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                  padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                  border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                  background 1.8s ease;
+    }
+    .escalation-box.visible {
+      max-height: 180px;
+      opacity: 1;
+      padding: 20px;
+      border-color: var(--border);
     }
     .escalation-text {
       font-family: 'Instrument Serif', serif; font-size: 18px;
       line-height: 1.5; color: var(--text); font-style: italic;
       transition: color 1.8s ease;
-    }
-
-    /* ——— PREMIUM KINETIC ESCALATION BOX (ACTIVE ONLY) ——— */
-    #active-escalation-box {
-      background: var(--accent-light);
-      border-radius: 16px;
-      max-height: 0;
-      opacity: 0;
-      visibility: hidden;
-      overflow: hidden;
-      padding: 0 20px;
-      border: 0 solid transparent;
-      transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, padding 0.5s cubic-bezier(0.4, 0, 0.2, 1), border-width 0.3s ease;
-    }
-    #active-escalation-box.visible {
-      max-height: 200px;
-      opacity: 1;
-      visibility: visible;
-      padding: 20px;
-      border: 1px solid var(--border);
     }
 
     /* ——— GHOST TEXT (dark states) ——— */
@@ -286,7 +281,9 @@
       margin: 0 auto;
       animation: completionGlow 3s ease forwards;
     }
-    .glyph-inner { font-size: 48px; line-height: 1; }
+    .glyph-inner {
+      font-size: 48px; line-height: 1;
+    }
 
     /* ——— SCROLL AREA ——— */
     .scroll-area { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
@@ -315,6 +312,7 @@
 
     /* ——— SWIPE HINT ——— */
     .swipe-hint { text-align: center; font-size: 10px; color: var(--text2); letter-spacing: 0.1em; margin-top: 8px; }
+
   </style>
 </head>
 <body>
@@ -325,9 +323,11 @@
       <span class="wordmark">OPERATOR</span>
       <div class="q-dots" id="ob-dots"></div>
     </div>
+
     <div class="scroll-area">
       <div id="ob-questions"></div>
     </div>
+
     <div class="mt16 gap8">
       <button class="btn btn-primary" id="ob-next-btn">Continue →</button>
       <button class="btn btn-ghost" id="ob-back-btn" style="display:none">← Back</button>
@@ -339,21 +339,26 @@
       <span class="wordmark">OPERATOR</span>
       <span class="streak-badge" id="streak-commit">— day streak</span>
     </div>
+
     <div class="flex1 scroll-area">
-      <label class="label" for="commit-text">tonight's commitment</label>
+      <div class="label">tonight's commitment</div>
       <div class="mt8 big-text serif">What's the one thing<br>tomorrow needs?</div>
+
       <div class="mt28">
         <textarea class="input-field" id="commit-text" rows="3" placeholder="The one thing. Not a list."></textarea>
       </div>
+
       <div class="mt16 gap8">
-        <label class="label" for="commit-time">complete by</label>
+        <div class="label">complete by</div>
         <input type="time" class="input-small" id="commit-time" value="17:00">
       </div>
+
       <div class="mt16 gap8">
-        <label class="label" for="commit-witness">witness (optional)</label>
+        <div class="label">witness (optional)</div>
         <input type="text" class="input-small" id="commit-witness" placeholder="Their name — they'll know if you don't">
       </div>
     </div>
+
     <div class="mt16">
       <button class="btn btn-primary" id="commit-btn">Set commitment →</button>
       <div class="swipe-hint mt8">This locks in. Tomorrow-you executes, doesn't negotiate.</div>
@@ -365,18 +370,23 @@
       <span class="wordmark">OPERATOR</span>
       <div class="status-dot"></div>
     </div>
+
     <div class="flex1 gap16" style="justify-content: center;">
       <div>
-        <label class="label">today's commitment</label>
+        <div class="label">today's commitment</div>
         <div class="mt8 commitment-display" id="morning-task"></div>
       </div>
+
       <div class="divider"></div>
+
       <div>
-        <label class="label">deadline</label>
+        <div class="label">deadline</div>
         <div class="mt8 timer-display" id="morning-deadline"></div>
       </div>
+
       <div class="ghost-anchor" id="morning-ghost"></div>
     </div>
+
     <div class="gap8">
       <button class="btn btn-primary" id="morning-open-btn">I'm starting — Open ↗</button>
       <div class="label" style="text-align:center">Timestamps when you log this.</div>
@@ -388,27 +398,33 @@
       <span class="wordmark">OPERATOR</span>
       <div class="status-dot" id="active-dot"></div>
     </div>
+
     <div class="flex1" style="display:flex; flex-direction:column; justify-content:space-between;">
+
       <div>
-        <label class="label">in progress</label>
+        <div class="label">in progress</div>
         <div class="mt8 commitment-display" id="active-task"></div>
       </div>
+
       <div style="text-align:center">
-        <label class="label">time remaining</label>
+        <div class="label">time remaining</div>
         <div class="mt8 timer-display" id="active-countdown" style="text-align:center"></div>
         <div class="progress-bar mt12">
           <div class="progress-fill" id="active-progress"></div>
         </div>
         <div class="mt8 label" id="active-subtext"></div>
       </div>
+
       <div>
         <div class="escalation-box" id="active-escalation-box">
-          <label class="label" style="margin-bottom:8px">// override signal</label>
+          <div class="label" style="margin-bottom:8px">// override signal</div>
           <div class="escalation-text" id="active-escalation-msg"></div>
         </div>
         <div class="ghost-anchor mt16" id="active-ghost"></div>
       </div>
+
     </div>
+
     <div class="mt16 gap8">
       <button class="btn btn-primary" id="done-btn">Mark Complete ✓</button>
       <button class="btn btn-secondary" id="drift-btn">I'm drifting — wake me up</button>
@@ -420,20 +436,29 @@
       <span class="wordmark">OPERATOR</span>
       <span class="chip">✓ Complete</span>
     </div>
+
     <div class="flex1" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px;">
-      <div class="glyph-burst"><div class="glyph-inner">◈</div></div>
+
+      <div class="glyph-burst">
+        <div class="glyph-inner">◈</div>
+      </div>
+
       <div style="text-align:center">
         <div class="big-text serif">Done.</div>
         <div class="mt8 label" id="complete-time-label"></div>
       </div>
+
       <div class="divider" style="width:100%;"></div>
+
       <div style="width:100%" class="gap12">
-        <label class="label" for="complete-reflection">what actually happened</label>
+        <div class="label">what actually happened</div>
         <textarea class="input-field" id="complete-reflection" rows="2" placeholder="One line. What did you do?"></textarea>
-        <label class="label mt8" for="complete-blocker">any confusion or blocker</label>
+        <div class="label mt8">any confusion or blocker</div>
         <input class="input-small" id="complete-blocker" placeholder="Optional — for future you">
       </div>
+
     </div>
+
     <div class="mt16 gap8">
       <button class="btn btn-primary" id="close-day-btn">Close the day →</button>
     </div>
@@ -444,18 +469,23 @@
       <span class="wordmark">OPERATOR</span>
       <span class="streak-badge" id="streak-closed">— day streak</span>
     </div>
+
     <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; gap:20px;">
       <div>
-        <label class="label">today closed</label>
+        <div class="label">today closed</div>
         <div class="mt8 big-text serif" id="closed-msg">Good execution.</div>
       </div>
+
       <div class="done-card" id="closed-summary"></div>
+
       <div class="divider"></div>
+
       <div style="opacity:0.5">
-        <label class="label">tomorrow opens at</label>
+        <div class="label">tomorrow opens at</div>
         <div class="mt8 mono" style="font-size:22px" id="tomorrow-time">10:00 PM</div>
       </div>
     </div>
+
     <div class="mt16 gap8">
       <button class="btn btn-secondary" id="commit-tomorrow-btn">Set tomorrow's commitment →</button>
     </div>
@@ -466,16 +496,19 @@
       <span class="wordmark">OPERATOR</span>
       <div class="status-dot" style="background:#CC1111;"></div>
     </div>
+
     <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; gap:20px;">
       <div>
-        <label class="label">day ended — not completed</label>
+        <div class="label">day ended — not completed</div>
         <div class="mt8 big-text serif" id="missed-text">This is what drift looks like.</div>
       </div>
-      <div class="escalation-box">
-        <div class="escalation-text" id="missed-anchor"></div>
+
+      <div class="escalation-box visible"> <div class="escalation-text" id="missed-anchor"></div>
       </div>
+
       <div class="ghost-anchor mt8" id="missed-ghost" style="opacity:1;"></div>
     </div>
+
     <div class="gap8">
       <button class="btn btn-primary" id="missed-commit-btn">Tomorrow, no excuses →</button>
       <button class="btn btn-ghost" id="missed-partial-btn">Partial — I did some of it</button>
@@ -495,20 +528,29 @@ const S = {
   currentScreen: null,
   urgency: 0,
   timerInterval: null,
+  escalationMsg: '',
+  escalationLockUntil: 0,
+  lastUrgency: -1
 };
 
+// LocalStorage keys
 const KEYS = {
   profile: 'op_profile_v2',
   today: 'op_today_v2',
   history: 'op_history_v2',
 };
 
-let lastEscalationMsg = '';
-let msgDisplayUntil = 0; // State lock for text reading execution
-
+// Fortified Loading Sequences against broken types
 function load() {
-  try { S.profile = JSON.parse(localStorage.getItem(KEYS.profile)); } catch(e) { S.profile = null; }
-  try { S.today = JSON.parse(localStorage.getItem(KEYS.today)); } catch(e) { S.today = null; }
+  try { 
+    S.profile = JSON.parse(localStorage.getItem(KEYS.profile)); 
+    if (S.profile && typeof S.profile !== 'object') S.profile = null;
+  } catch(e) { S.profile = null; }
+  
+  try { 
+    S.today = JSON.parse(localStorage.getItem(KEYS.today)); 
+    if (S.today && typeof S.today !== 'object') S.today = null;
+  } catch(e) { S.today = null; }
 }
 
 function save(key, data) {
@@ -516,23 +558,40 @@ function save(key, data) {
 }
 
 function getHistory() {
-  try { return JSON.parse(localStorage.getItem(KEYS.history)) || []; } catch(e) { return []; }
+  try { 
+    const h = JSON.parse(localStorage.getItem(KEYS.history)); 
+    return Array.isArray(h) ? h : [];
+  } catch(e) { return []; }
 }
 
+// Fortified Day-Streak Engine
 function getStreak() {
   const h = getHistory();
-  if (h.length === 0) return 0;
-  const sorted = h.sort((a,b) => new Date(b.date) - new Date(a.date));
-  let streak = 0;
-  let expected = new Date();
-  const todayStr = expected.toDateString();
-  const todayEntry = sorted.find(e => e.date === todayStr);
+  if (!Array.isArray(h)) return 0;
   
-  if (!todayEntry || !todayEntry.completed) { expected.setDate(expected.getDate() - 1); }
-  while (true) {
-    const checkDateStr = expected.toDateString();
-    const match = sorted.find(e => e.date === checkDateStr);
-    if (match && match.completed) { streak++; expected.setDate(expected.getDate() - 1); } else { break; }
+  const completedDates = new Set();
+  h.forEach(d => {
+    if (d && d.completed && d.date) {
+      completedDates.add(new Date(d.date).toDateString());
+    }
+  });
+  
+  // Keep streak alive if target is active or completed today
+  if (S.today && S.today.completed && S.today.date) {
+    completedDates.add(new Date(S.today.date).toDateString());
+  }
+  
+  let streak = 0;
+  let checkDate = new Date();
+  
+  // If today isn't completed yet, back up one step to yesterday to scan backward chain
+  if (!completedDates.has(checkDate.toDateString())) {
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+  
+  while (completedDates.has(checkDate.toDateString())) {
+    streak++;
+    checkDate.setDate(checkDate.getDate() - 1);
   }
   return streak;
 }
@@ -560,14 +619,12 @@ function router() {
   const now = new Date();
   const todayStr = now.toDateString();
 
-  if (!S.today || S.today.date !== todayStr) {
-    if (S.today && S.today.date !== todayStr && !S.today.completed) {
-      addHistory({ date: S.today.date, task: S.today.task, completed: false });
+  if (S.today && S.today.date !== todayStr) {
+    if (!S.today.dayClosed) {
+      addHistory({ date: S.today.date, task: S.today.task, completed: S.today.completed, reflection: S.today.reflection || '' });
     }
-    if (S.today && S.today.date !== todayStr) {
-      S.today = null;
-      save(KEYS.today, null);
-    }
+    S.today = null;
+    save(KEYS.today, null);
   }
 
   if (!S.today) {
@@ -767,7 +824,7 @@ function renderObQuestion() {
     inputHtml = `<input type="text" class="input-field" id="ob-input" placeholder="${q.placeholder}" value="${obAnswers[q.key] || ''}" style="font-size:18px;padding:16px 18px;">`;
   } else if (q.type === 'select' || q.type === 'chips') {
     inputHtml = `<div class="override-options" id="ob-chips">
-      ${q.options.map(o => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
+      ${q.options.map((o, i) => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
     </div>`;
   }
 
@@ -801,228 +858,3 @@ function obNext() {
 
   if ((q.type === 'text' || q.type === 'textarea') && !obAnswers[q.key]) {
     inp.style.borderColor = 'var(--accent)';
-    inp.placeholder = 'This one matters — take a moment.';
-    inp.focus();
-    return;
-  }
-  if ((q.type === 'select' || q.type === 'chips') && !obAnswers[q.key]) {
-    document.querySelectorAll('#ob-chips .override-chip')[0]?.classList.add('selected');
-    obAnswers[q.key] = OB_QUESTIONS[obStep].options[0];
-  }
-
-  obStep++;
-  if (obStep >= OB_QUESTIONS.length) {
-    S.profile = {
-      drift: obAnswers.drift,
-      stakes: obAnswers.stakes,
-      activeWindow: obAnswers.activeWindow,
-      override: obAnswers.override,
-      forward: obAnswers.forward,
-      createdAt: new Date().toISOString(),
-    };
-    save(KEYS.profile, S.profile);
-    router();
-  } else {
-    renderObQuestion();
-  }
-}
-
-function obBack() {
-  if (obStep > 0) {
-    obStep--;
-    renderObQuestion();
-  }
-}
-
-// =====================================================
-// COMMIT SCREEN
-// =====================================================
-
-function refreshCommitScreen() {
-  const streak = getStreak();
-  document.getElementById('streak-commit').textContent = streak > 0 ? `${streak} day streak` : '—';
-}
-
-function submitCommit() {
-  const task = document.getElementById('commit-text').value.trim();
-  const timeVal = document.getElementById('commit-time').value || '17:00';
-  const witness = document.getElementById('commit-witness').value.trim();
-
-  if (!task) {
-    document.getElementById('commit-text').focus();
-    document.getElementById('commit-text').placeholder = 'Write the one thing. Be specific.';
-    return;
-  }
-
-  const today = new Date();
-  const [h, m] = timeVal.split(':').map(Number);
-  const deadline = new Date(today);
-  deadline.setHours(h, m, 0, 0);
-
-  if (deadline < today) deadline.setDate(deadline.getDate() + 1);
-
-  S.today = {
-    date: deadline.toDateString(),
-    task,
-    deadlineTime: deadline.toISOString(),
-    startTime: null,
-    started: false,
-    completed: false,
-    dayClosed: false,
-    missed: false,
-    witness,
-    reflection: '',
-    blocker: '',
-  };
-
-  save(KEYS.today, S.today);
-  document.getElementById('commit-text').value = '';
-  document.getElementById('commit-witness').value = '';
-  router();
-}
-
-// =====================================================
-// MORNING SCREEN
-// =====================================================
-
-function refreshMorningScreen() {
-  if (!S.today) return;
-  document.getElementById('morning-task').textContent = `"${S.today.task}"`;
-  const dl = new Date(S.today.deadlineTime);
-  document.getElementById('morning-deadline').textContent = dl.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-  const ghost = getGhostText();
-  const ghostEl = document.getElementById('morning-ghost');
-  if (ghost) ghostEl.textContent = `"${ghost}"`;
-  setUrgency(0);
-}
-
-function openCommitment() {
-  if (!S.today) return;
-  S.today.started = true;
-  S.today.startTime = new Date().toISOString();
-  save(KEYS.today, S.today);
-  router();
-}
-
-// =====================================================
-// ACTIVE SCREEN — COUNTDOWN WITH EXPIRED CLEARANCE FIXES
-// =====================================================
-
-function refreshActiveScreen() {
-  if (!S.today) return;
-  document.getElementById('active-task').textContent = `"${S.today.task}"`;
-  const ghostEl = document.getElementById('active-ghost');
-  const ghost = getGhostText();
-  if (ghost) ghostEl.textContent = `"${ghost}"`;
-
-  startCountdown();
-}
-
-function startCountdown() {
-  if (S.timerInterval) clearInterval(S.timerInterval);
-
-  function tick() {
-    if (!S.today) return;
-    const now = new Date();
-    const deadline = new Date(S.today.deadlineTime);
-    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
-    const totalMs = (deadline - start) || 1;
-    const remaining = deadline - now;
-
-    const oldUrgency = S.urgency;
-    const urgency = calcUrgency(remaining, totalMs);
-    setUrgency(urgency);
-
-    const countEl = document.getElementById('active-countdown');
-    const progressEl = document.getElementById('active-progress');
-    const subtextEl = document.getElementById('active-subtext');
-    const escBox = document.getElementById('active-escalation-box');
-    const escMsg = document.getElementById('active-escalation-msg');
-    const driftBtn = document.getElementById('drift-btn');
-    const dot = document.getElementById('active-dot');
-
-    if (remaining <= 0) {
-      countEl.textContent = '00:00';
-      if (dot) {
-        dot.classList.remove('pulsing');
-        dot.classList.add('fast-pulse');
-      }
-      if (escBox) escBox.classList.remove('visible'); // Complete cleanup on state expiration
-      if (driftBtn) driftBtn.style.display = 'none'; // Lock execution button completely
-      if (subtextEl) subtextEl.textContent = 'time elapsed';
-      return;
-    } else {
-      if (driftBtn) driftBtn.style.display = 'flex';
-    }
-
-    const h = Math.floor(remaining / 3600000);
-    const min = Math.floor((remaining % 3600000) / 60000);
-    const sec = Math.floor((remaining % 60000) / 1000);
-    if (h > 0) {
-      countEl.textContent = `${h}h ${String(min).padStart(2,'0')}m`;
-    } else {
-      countEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-    }
-
-    const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
-    if (progressEl) progressEl.style.width = pct + '%';
-
-    const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
-    if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
-
-    if (dot) {
-      dot.classList.remove('pulsing', 'fast-pulse');
-      if (urgency >= 4) dot.classList.add('fast-pulse');
-      else if (urgency >= 2) dot.classList.add('pulsing');
-    }
-
-    // Escalation message logic: Only swap message on actual tier transitions
-    if (urgency >= 1) {
-      if (urgency !== oldUrgency || !lastEscalationMsg) {
-        lastEscalationMsg = getEscalationMsg(urgency);
-        msgDisplayUntil = Date.now() + 10000; // Lock state for 10 seconds to read
-      }
-
-      if (Date.now() < msgDisplayUntil) {
-        if (escBox) escBox.classList.add('visible');
-        if (escMsg) escMsg.textContent = lastEscalationMsg;
-      } else {
-        if (escBox) escBox.classList.remove('visible'); // Fade away gracefully after 10s
-      }
-    } else {
-      if (escBox) escBox.classList.remove('visible');
-    }
-  }
-
-  tick();
-  S.timerInterval = setInterval(tick, 1000);
-}
-
-function markDone() {
-  if (!S.today) return;
-  S.today.completed = true;
-  S.today.completedTime = new Date().toISOString();
-  save(KEYS.today, S.today);
-  if (S.timerInterval) clearInterval(S.timerInterval);
-  setUrgency(0);
-  router();
-}
-
-function triggerWakeup() {
-  lastEscalationMsg = getEscalationMsg(Math.max(1, S.urgency));
-  msgDisplayUntil = Date.now() + 10000; // Reset 10-second static window reading anchor
-  const escMsg = document.getElementById('active-escalation-msg');
-  const escBox = document.getElementById('active-escalation-box');
-  if (escMsg) escMsg.textContent = lastEscalationMsg;
-  if (escBox) {
-    escBox.classList.add('visible');
-  }
-}
-
-// =====================================================
-// COMPLETE SCREEN
-// =====================================================
-
-function refreshCompleteScreen() {
-  if (!S.today || !S.today.completedTime) return;
-  const ct = new Date
