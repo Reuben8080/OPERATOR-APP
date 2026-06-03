@@ -333,14 +333,14 @@
       <div class="divider"></div>
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div style="font-size:14px;line-height:1.75;color:var(--text2);">OPERATOR is for the gap between knowing and doing. Most productivity tools make lists. This one makes you account for the day.</div>
-        <div style="font-size:14px;line-height:1.75;color:var(--text2);">One commitment per day. A real deadline. An urgency engine that won't let you coast. No notifications — just a screen that changes colour as the clock runs down.</div>
+        <div style="font-size:14px;line-height:1.75;color:var(--text2);">One commitment per session. A real deadline. An urgency engine that won't let you coast. No notifications — just a screen that changes colour as the clock runs down.</div>
         <div style="font-size:14px;line-height:1.75;color:var(--text2);">Best for people who already know their problem isn't information — it's follow-through.</div>
       </div>
       <div class="divider"></div>
       <div style="display:flex;gap:24px;">
         <div style="flex:1;text-align:center;">
           <div style="font-family:'Instrument Serif',serif;font-size:22px;color:var(--accent);">1</div>
-          <div class="label mt8">commitment<br>per day</div>
+          <div class="label mt8">commitment<br>per session</div>
         </div>
         <div style="flex:1;text-align:center;">
           <div style="font-family:'Instrument Serif',serif;font-size:22px;color:var(--accent);">5</div>
@@ -370,7 +370,6 @@
 
     <div class="mt16 gap8">
       <button class="btn btn-primary" id="ob-next-btn">Continue →</button>
-      <button class="btn btn-ghost" id="ob-back-btn" style="display:none">← Back</button>
     </div>
   </div>
 
@@ -620,7 +619,7 @@ function getStreak() {
   let streak = 0;
   const seen = new Set();
   const sorted = h
-    .filter(d => d.completed)
+    .filter(d => d.completed && !d.partial)
     .filter(d => { if (seen.has(d.date)) return false; seen.add(d.date); return true; })
     .sort((a,b) => new Date(b.date) - new Date(a.date));
   // If today has no completed entry yet (morning), start counting from yesterday
@@ -992,8 +991,6 @@ function renderObQuestion() {
   renderObDots();
   const q = OB_QUESTIONS[obStep];
   const container = document.getElementById('ob-questions');
-  const backBtn = document.getElementById('ob-back-btn');
-  backBtn.style.display = obStep > 0 ? 'flex' : 'none';
 
   let inputHtml = '';
   if (q.type === 'textarea') {
@@ -1072,13 +1069,6 @@ function obNext() {
   }
 }
 
-function obBack() {
-  if (obStep > 0) {
-    obStep--;
-    renderObQuestion();
-  }
-}
-
 // =====================================================
 // COMMIT SCREEN
 // =====================================================
@@ -1101,6 +1091,19 @@ function refreshCommitScreen() {
       label.textContent = "tonight's commitment";
       heading.innerHTML = "What's the one thing<br>tomorrow needs?";
     }
+  }
+  // Set default deadline from the active window answer given during onboarding
+  const timeInput = document.getElementById('commit-time');
+  if (timeInput && S.profile && S.profile.activeWindow) {
+    const windowMap = {
+      'Early morning (5–9am)':   '09:00',
+      'Late morning (9am–12pm)': '12:00',
+      'Afternoon (12–5pm)':      '17:00',
+      'Evening (5–10pm)':        '21:00',
+      'Night (10pm+)':           '23:00',
+    };
+    const mapped = windowMap[S.profile.activeWindow];
+    if (mapped) timeInput.value = mapped;
   }
 }
 
@@ -1575,7 +1578,6 @@ function showHistoryScreen(returnTo) {
 // =====================================================
 
 document.getElementById('ob-next-btn').addEventListener('click', obNext);
-document.getElementById('ob-back-btn').addEventListener('click', obBack);
 document.getElementById('welcome-start-btn').addEventListener('click', () => {
   localStorage.setItem('op_welcomed', '1');
   initOnboarding();
