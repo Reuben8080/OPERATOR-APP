@@ -288,9 +288,14 @@
     .scroll-area::-webkit-scrollbar { display: none; }
 
     /* ——— ONBOARDING SPECIFIC ——— */
-    .q-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.3s ease; }
-    .q-dot.done { background: var(--accent); }
-    .q-dot.current { background: var(--text); width: 18px; border-radius: 3px; }
+    .q-dots { display: flex; gap: 8px; align-items: center; }
+    .q-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #1C1C1A; opacity: 0.18;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .q-dot.done { opacity: 0.45; }
+    .q-dot.current { opacity: 1; transform: scale(1.4); }
 
     /* ——— STREAK BADGE ——— */
     .streak-badge {
