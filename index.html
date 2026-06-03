@@ -397,7 +397,7 @@
 
       <div>
         <div class="escalation-box" id="active-escalation-box" style="display:none;">
-          <div class="label" style="margin-bottom:8px">// override signal</div>
+          <div class="label" style="margin-bottom:8px" id="active-escalation-header">// override signal</div>
           <div class="escalation-text" id="active-escalation-msg"></div>
         </div>
         <div class="ghost-anchor mt16" id="active-ghost"></div>
@@ -634,20 +634,21 @@ function addHistory(entry) {
 }
 
 // =====================================================
-// URGENCY ENGINE (Proportional Ratio Adjustments)
+// EXPONENTIAL URGENCY MAPPING (Accelerating Curve)
 // =====================================================
-
 function calcUrgency(msRemaining, totalMs) {
   if (!S.today || !S.today.started) return 0;
   if (msRemaining <= 0) return 5;
 
   const pctLeft = msRemaining / totalMs;
+  const elapsed = 1 - pctLeft;
 
-  if (pctLeft > 0.75) return 0; 
-  if (pctLeft > 0.41) return 1; 
-  if (pctLeft > 0.25) return 2; 
-  if (pctLeft > 0.11) return 3; 
-  return 4;                     
+  // Exponential scale mapping: Urgency escalates sharply in the final 35% of time window
+  if (elapsed < 0.35) return 0; // First phase: Calm / Focus baseline
+  if (elapsed < 0.65) return 1; // Second phase: Linear progression
+  if (elapsed < 0.80) return 2; // Third phase: Accelerating warning
+  if (elapsed < 0.92) return 3; // Danger zone: Pattern disruption threshold
+  return 4;                     // Terminal crash dive: Raw execution crisis
 }
 
 function setUrgency(level) {
@@ -666,13 +667,56 @@ function getGhostText() {
 }
 
 // =====================================================
-// ACTIVE SCREEN — COUNTDOWN & FIXES
+// PATTERN DISRUPTION ESCALATION STRATEGY
 // =====================================================
-
 let lastUrgencyLevel = -1;
 let lastEscalationMsg = '';
 let isDriftingActive = false;
 
+function getEscalationMsg(urgency, forcePatternDisruption = false) {
+  const p = S.profile || { drift: "falling behind", stakes: "your future", override: "waking up", forward: "success" };
+  
+  // High-priority state machine pattern disruption merge (Tiers 3, 4, 5, or Manual Lockout)
+  if (forcePatternDisruption || urgency >= 3) {
+    const disruptionPool = [
+      `CRITICAL INTERVENTION: You are actively running the code that triggers "${p.drift}". Cut the loop. Execute now for ${p.stakes}.`,
+      `PATTERN RECOGNITION: Your brain is defaulting back to "${p.drift}". Your selected hard anchor was: "${p.override}". Apply it immediately.`,
+      `TACTICAL ALERT: Look at this counter. The person who achieves "${p.forward}" does not fold here. Do it for ${p.stakes}.`,
+      `EXECUTION DISRUPTION: Stop negotiating with discomfort. If you yield to "${p.drift}" right now, you abandon your alignment with ${p.stakes}.`,
+      `ZERO DEFERMENT: You explicitly marked "${p.override}" as your emergency breaker. The system is forcing it. Stand up and complete the task.`
+    ];
+    return disruptionPool[Math.floor(Math.random() * disruptionPool.length)];
+  }
+
+  // Expanded baseline behaviors (Levels 1 and 2)
+  const structuralPools = {
+    1: [
+      `This is the exact threshold where momentum fractures. Maintain concentration.`,
+      `Are you operating your timeline right now, or just watching numbers decay?`,
+      `Drop secondary screens. Strip tabs. One singular line of continuous action.`,
+      `Drifting starts with an innocent break in posture. Re-align your tracking right now.`,
+      `Friction is standard. Pushing past this initial chemical resistance is the entire game.`,
+      `Your current output rate does not protect your long-term goals. Tighten up.`,
+      `Do not let a low-level micro-distraction hijack this block. Stay locked.`
+    ],
+    2: [
+      `The window is closing—no longer passively, but at an accelerating scale. Wake up.`,
+      `Recognize this feeling? You have stood directly on this failure line before. Move.`,
+      `Time is bleeding from your day in real-time. Action precedes motivation.`,
+      `Take a three-second physical reset, open your eyes, and dive back into the work.`,
+      `No backup squad is coming to salvage this block. This execution layer is entirely on you.`,
+      `Your attention is being weaponized against you. Re-claim custody of your environment.`,
+      `You are reaching the tipping point. The next five minutes determine the evening's trajectory.`
+    ]
+  };
+
+  const selectedPool = structuralPools[urgency] || [`Keep tracking.`];
+  return selectedPool[Math.floor(Math.random() * selectedPool.length)];
+}
+
+// =====================================================
+// ACTIVE SCREEN — LIVE ENGINE & TIMERS
+// =====================================================
 function refreshActiveScreen() {
   if (!S.today) return;
   
@@ -686,52 +730,11 @@ function refreshActiveScreen() {
   lastUrgencyLevel = -1;
   lastEscalationMsg = '';
   isDriftingActive = false;
-  startCountdown();
-}
-
-function getEscalationMsg(urgency) {
-  if (!S.profile) return "Clock's running.";
-  const p = S.profile;
   
-  const msgs = {
-    1: [
-      `This is the exact threshold where your day's momentum breaks. Snap out of it.`,
-      `Are you operating your day right now, or just spectating the countdown?`,
-      `Put down the secondary screens. Close the extra tabs. One clean line of execution now.`,
-      `Drifting starts small—a single non-essential click. Kill it before it compounds.`,
-      p && p.drift ? `You are running the exact sequence that leads to "${p.drift}". Break it.` : `Friction is the target. Pushing through this discomfort is the entire point.`
-    ],
-    2: [
-      p && p.drift ? `This is how "${p.drift}" always starts. Look at your hands.` : `Recognize this feeling? You have stood right on this failure line before.`,
-      `The window is closing. Not slowly anymore. Wake up.`,
-      p && p.stakes ? `${p.stakes} is on the line. Not app points. Not a casual streak.` : `Time is bleeding out in real time. Move now.`,
-      `Take one deep breath, close your eyes for three seconds, open them, and execute.`,
-      p && p.forward ? `The version of you who achieves "${p.forward}" is earned in this exact minute.` : `No one is coming to salvage this afternoon. This hour is entirely on you.`
-    ],
-    3: [
-      p && p.drift ? `"${p.drift}"—that's what today becomes if you don't break the pattern now.` : `Crunch time. Drop the excuses and change your posture.`,
-      `Your brain is actively hunting for an escape hatch. Seal it off entirely.`,
-      `Look back at your commitment text. Do your actions match it, or are you negotiating?`,
-      `Strip away all perfectionism. Give me a terrible, messy first chunk of work. Just move.`,
-      `Action precedes motivation. Do not wait until you 'feel' like finishing this.`
-    ],
-    4: [
-      p && p.drift ? `You swore you wouldn't repeat "${p.drift}". Today decides if that was true.` : `Last clear chance. No softening, no deferring.`,
-      p && p.forward ? `Five years from now—"${p.forward}"—this exact block of resistance matters.` : `This is where it actually counts. Right here, right now.`,
-      `Ten minutes of raw focus can still salvage this entire commitment. Go savage mode.`,
-      `Do not let this clock hit zero while you are standing completely still.`,
-      p && p.stakes ? `If everything depended on finishing this for ${p.stakes}, what is your next exact move?` : `Minutes remaining. Do not surrender this day to the drift.`
-    ],
-    5: [
-      p && p.drift ? `"${p.drift}" won today. Own it, look at it, and ensure it fails tomorrow.` : `The window has closed. The day is officially uncompleted.`,
-      p && p.forward ? `The person who reaches "${p.forward}" didn't drop blocks like this.` : `Execution failed. Stop hiding from the screen.`,
-      `This isn't judgment; it's raw data. Look at the text, accept the drop, reset the loop.`,
-      `Tomorrow's clarity is bought entirely with today's completely honest assessment.`
-    ],
-  };
-
-  const arr = msgs[urgency] || [`Keep moving.`];
-  return arr[Math.floor(Math.random() * arr.length)];
+  const headerEl = document.getElementById('active-escalation-header');
+  if (headerEl) headerEl.textContent = "// override signal";
+  
+  startCountdown();
 }
 
 function startCountdown() {
@@ -750,6 +753,7 @@ function startCountdown() {
     const subtextEl = document.getElementById('active-subtext');
     const escBox = document.getElementById('active-escalation-box');
     const escMsg = document.getElementById('active-escalation-msg');
+    const headerEl = document.getElementById('active-escalation-header');
     const dot = document.getElementById('active-dot');
     const driftBtn = document.getElementById('drift-btn');
 
@@ -784,7 +788,7 @@ function startCountdown() {
     if (urgency !== lastUrgencyLevel) {
       lastUrgencyLevel = urgency;
       if (!isDriftingActive) {
-        lastEscalationMsg = '';
+        lastEscalationMsg = ''; // Force regeneration when changing tiers naturally
       }
     }
 
@@ -811,11 +815,12 @@ function startCountdown() {
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
-    // Natural update routine runs ONLY if manual tracking is inactive
+    // NATIVE LOOP RENDER LAYER — Only runs if manual circuit breaker is open
     if (!isDriftingActive) {
+      if (headerEl) headerEl.textContent = "// override signal";
       if (urgency >= 1) {
         if (!lastEscalationMsg) {
-          lastEscalationMsg = getEscalationMsg(urgency);
+          lastEscalationMsg = getEscalationMsg(urgency, false);
         }
         if (escBox) {
           escBox.style.display = 'block';
@@ -838,35 +843,42 @@ function startCountdown() {
   S.timerInterval = setInterval(tick, 1000);
 }
 
+// =====================================================
+// UN-INTERRUPTIBLE INTERVENTION BREAK-CIRCUIT
+// =====================================================
 function triggerWakeup() {
   if (S.today && (new Date() > new Date(S.today.deadlineTime))) return;
 
   isDriftingActive = true;
-  const currentLevel = Math.max(1, S.urgency);
   
-  const wakeUpMsg = getEscalationMsg(currentLevel);
-  lastEscalationMsg = wakeUpMsg;
+  // Forces a deep pattern disruption sequence instantly utilizing onboarding entries
+  const disruptionPayload = getEscalationMsg(S.urgency, true);
+  lastEscalationMsg = disruptionPayload;
   
   const escMsg = document.getElementById('active-escalation-msg');
   const escBox = document.getElementById('active-escalation-box');
+  const headerEl = document.getElementById('active-escalation-header');
   
-  if (escMsg) escMsg.textContent = wakeUpMsg;
+  if (headerEl) headerEl.textContent = "// pattern disruption lock activated";
+  if (escMsg) escMsg.textContent = disruptionPayload;
+  
   if (escBox) { 
     escBox.style.display = 'block'; 
-    escBox.style.transition = 'none'; // Overrides CSS transition engine instantly
+    escBox.style.transition = 'none'; // Strips away layout lag interpolation entirely
     escBox.style.opacity = '1';       
-    escBox.style.transform = 'scale(1.02)';
-    escBox.offsetHeight; // Forces a clean layout flow reset
-    setTimeout(() => { escBox.style.transform = 'scale(1)'; }, 100);
+    escBox.style.transform = 'scale(1.03)';
+    escBox.offsetHeight; // Forces native DOM calculation pipeline clean reset
+    setTimeout(() => { escBox.style.transform = 'scale(1)'; }, 80);
   }
 
   if (S.driftTimeout) clearTimeout(S.driftTimeout);
   
-  // Rigid 30-Second Disruption Window
+  // Un-interruptible 30-Second Disruption Window Barrier
   S.driftTimeout = setTimeout(() => {
     isDriftingActive = false;
-    lastEscalationMsg = ''; // Force resets the loop engine string cache
+    lastEscalationMsg = ''; // Flushes cached values to allow the loop engine to update cleanly
     
+    if (!S.today) return;
     const now = new Date();
     const deadline = new Date(S.today.deadlineTime);
     const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
@@ -881,8 +893,9 @@ function triggerWakeup() {
       }
     } else {
       if (escBox) escBox.style.transition = 'var(--trans)'; 
-      lastEscalationMsg = getEscalationMsg(currentUrgency);
+      lastEscalationMsg = getEscalationMsg(currentUrgency, false);
       if (escMsg) escMsg.textContent = lastEscalationMsg;
+      if (headerEl) headerEl.textContent = "// override signal";
     }
   }, 30000); 
 }
@@ -1211,7 +1224,7 @@ function refreshMissedScreen() {
     ghostEl.textContent = `"${ghost}"`;
   }
   const anchorEl = document.getElementById('missed-anchor');
-  if (anchorEl) anchorEl.textContent = getEscalationMsg(5);
+  if (anchorEl) anchorEl.textContent = getEscalationMsg(5, true);
   
   const task = S.today ? S.today.task : '';
   const missedTextEl = document.getElementById('missed-text');
