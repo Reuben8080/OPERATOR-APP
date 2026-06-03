@@ -38,6 +38,7 @@
 
     html, body {
       height: 100%; width: 100%;
+      height: 100dvh;
       background: var(--bg);
       color: var(--text);
       font-family: 'DM Mono', monospace;
@@ -58,6 +59,7 @@
 
     #app {
       height: 100%;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
       padding-top: calc(var(--safe-top) + 16px);
@@ -113,6 +115,9 @@
       cursor: pointer; border: none; outline: none;
       transition: all 0.2s ease; -webkit-appearance: none;
       width: 100%;
+      touch-action: manipulation;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     .btn-primary {
       background: var(--text); color: var(--bg);
@@ -158,7 +163,7 @@
     .input-small {
       background: var(--bg2); border: 1.5px solid var(--border);
       border-radius: 10px; padding: 12px 16px;
-      font-family: 'DM Mono', monospace; font-size: 13px;
+      font-family: 'DM Mono', monospace; font-size: 16px;
       color: var(--text); width: 100%; outline: none;
       transition: var(--trans); -webkit-appearance: none;
     }
@@ -232,6 +237,9 @@
       font-family: 'DM Mono', monospace; font-size: 11px;
       letter-spacing: 0.03em; cursor: pointer;
       transition: all 0.2s ease;
+      touch-action: manipulation;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     .override-chip.selected {
       background: var(--text); color: var(--bg);
@@ -531,6 +539,8 @@ const S = {
 
 let currentUrgencyLevel = 0;
 let fadeTimeout = null;
+let driftShownAt = null;
+const DRIFT_SUSTAIN_MS = 15000;
 
 const KEYS = {
   profile: 'op_profile_v2',
@@ -572,6 +582,7 @@ function getStreak() {
 
 function resetDriftButtonState() {
   if (S.driftLockInterval) { clearInterval(S.driftLockInterval); S.driftLockInterval = null; }
+  driftShownAt = null;
   const driftBtn = document.getElementById('drift-btn');
   if (driftBtn) {
     driftBtn.removeAttribute('disabled');
@@ -976,6 +987,42 @@ function refreshActiveScreen() {
   startCountdown();
 }
 
+function scheduleDriftFade() {
+  if (S.driftTimeout) clearTimeout(S.driftTimeout);
+  if (fadeTimeout) clearTimeout(fadeTimeout);
+  const elapsed = driftShownAt ? (Date.now() - driftShownAt) : 0;
+  const remaining = Math.max(DRIFT_SUSTAIN_MS - elapsed, 0);
+  S.driftTimeout = setTimeout(() => {
+    const escBox = document.getElementById('active-escalation-box');
+    if (escBox) {
+      escBox.style.opacity = '0';
+      fadeTimeout = setTimeout(() => { escBox.style.display = 'none'; }, 250);
+    }
+    driftShownAt = null;
+  }, remaining);
+}
+
+function startDriftLock(totalSeconds) {
+  const driftBtn = document.getElementById('drift-btn');
+  if (!driftBtn) return;
+  const lockStartedAt = Date.now();
+  const lockMs = totalSeconds * 1000;
+  driftBtn.setAttribute('disabled', 'true');
+
+  function updateLockLabel() {
+    const elapsed = Date.now() - lockStartedAt;
+    const timeLeft = Math.ceil((lockMs - elapsed) / 1000);
+    if (timeLeft > 0) {
+      driftBtn.textContent = `Locked out (${timeLeft}s)`;
+    } else {
+      resetDriftButtonState();
+    }
+  }
+
+  updateLockLabel();
+  S.driftLockInterval = setInterval(updateLockLabel, 500);
+}
+
 function showOverrideSignal(msg, autoTriggered = false) {
   const escBox = document.getElementById('active-escalation-box');
   const escMsg = document.getElementById('active-escalation-msg');
@@ -986,32 +1033,15 @@ function showOverrideSignal(msg, autoTriggered = false) {
   escBox.style.display = 'block';
   escBox.offsetHeight; // Force layout pass reflow
   escBox.style.opacity = '1';
+  driftShownAt = Date.now();
 
-  if (S.driftTimeout) clearTimeout(S.driftTimeout);
-  if (fadeTimeout) clearTimeout(fadeTimeout);
   if (S.driftLockInterval) clearInterval(S.driftLockInterval);
 
   if (!autoTriggered && driftBtn) {
-    let timeLeft = 15;
-    driftBtn.setAttribute('disabled', 'true');
-    driftBtn.textContent = `Locked out (${timeLeft}s)`;
-
-    S.driftLockInterval = setInterval(() => {
-      timeLeft--;
-      if (timeLeft > 0) {
-        driftBtn.textContent = `Locked out (${timeLeft}s)`;
-      } else {
-        resetDriftButtonState();
-      }
-    }, 1000);
+    startDriftLock(15);
   }
 
-  S.driftTimeout = setTimeout(() => {
-    escBox.style.opacity = '0';
-    fadeTimeout = setTimeout(() => {
-      escBox.style.display = 'none';
-    }, 250);
-  }, 15000);
+  scheduleDriftFade();
 }
 
 function startCountdown() {
@@ -1227,6 +1257,75 @@ if (typeof navigator.serviceWorker !== 'undefined') {
     console.log("Service worker registration skipped or unavailable.");
   });
 }
+
+// Re-anchor timers when Android brings the app back to foreground
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    // Drift box: recalculate remaining display time based on wall clock
+    if (driftShownAt) {
+      const escBox = document.getElementById('active-escalation-box');
+      if (escBox && escBox.style.display !== 'none') {
+        scheduleDriftFade();
+      } else {
+        driftShownAt = null;
+      }
+    }
+    // Drift lock: recalculate remaining lock time; startDriftLock reads lockStartedAt internally
+    // The 500ms interval in startDriftLock self-corrects on resume — no extra action needed
+
+    // Countdown: restart the tick interval so the display updates immediately
+    if (S.currentScreen === 'active' && S.today && S.today.started && !S.today.completed) {
+      if (S.timerInterval) clearInterval(S.timerInterval);
+      const tick = () => {
+        if (!S.today) return;
+        const now = new Date();
+        const deadline = new Date(S.today.deadlineTime);
+        const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
+        const totalMs = deadline - start;
+        const remaining = deadline - now;
+        const countEl = document.getElementById('active-countdown');
+        const progressEl = document.getElementById('active-progress');
+        const subtextEl = document.getElementById('active-subtext');
+        const dot = document.getElementById('active-dot');
+        const driftBtn = document.getElementById('drift-btn');
+
+        if (remaining <= 0) {
+          if (S.timerInterval) clearInterval(S.timerInterval);
+          if (S.driftTimeout) clearTimeout(S.driftTimeout);
+          if (fadeTimeout) clearTimeout(fadeTimeout);
+          resetDriftButtonState();
+          setUrgency(5);
+          if (countEl) countEl.textContent = 'TIME';
+          if (subtextEl) subtextEl.textContent = 'time is up';
+          if (progressEl) progressEl.style.width = '100%';
+          if (dot) { dot.classList.remove('pulsing'); dot.classList.add('fast-pulse'); }
+          const escBox = document.getElementById('active-escalation-box');
+          if (escBox) { escBox.style.opacity = '0'; escBox.style.display = 'none'; }
+          if (driftBtn) { driftBtn.setAttribute('disabled', 'true'); driftBtn.style.opacity = '0.3'; }
+          return;
+        }
+
+        const urgency = calcUrgency(remaining, totalMs);
+        setUrgency(urgency);
+        const h = Math.floor(remaining / 3600000);
+        const min = Math.floor((remaining % 3600000) / 60000);
+        const sec = Math.floor((remaining % 60000) / 1000);
+        if (countEl) countEl.textContent = h > 0 ? `${h}h ${String(min).padStart(2,'0')}m` : `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
+        if (progressEl) progressEl.style.width = pct + '%';
+        const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
+        if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
+        if (dot) {
+          dot.classList.remove('pulsing', 'fast-pulse');
+          if (urgency >= 4) dot.classList.add('fast-pulse');
+          else if (urgency >= 2) dot.classList.add('pulsing');
+        }
+      };
+      tick();
+      S.timerInterval = setInterval(tick, 1000);
+    }
+  }
+});
 
 router();
 </script>
