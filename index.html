@@ -592,7 +592,9 @@ const S = {
 let currentUrgencyLevel = 0;
 let fadeTimeout = null;
 let driftShownAt = null;
+let graceTimeout = null; // 10s window when deadline hits — partial/complete still allowed
 const DRIFT_SUSTAIN_MS = 15000;
+const GRACE_MS = 10000; // after deadline, before auto-fail
 
 const KEYS = {
   profile: 'op_profile_v2',
@@ -645,7 +647,9 @@ function resetDriftButtonState() {
   driftShownAt = null;
   const driftBtn = document.getElementById('drift-btn');
   if (driftBtn) {
+    driftBtn._graceMode = false;
     driftBtn.removeAttribute('disabled');
+    driftBtn.style.opacity = '';
     driftBtn.textContent = "I'm drifting — wake me up";
   }
 }
@@ -657,6 +661,7 @@ function showScreen(id) {
   if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
   if (S.driftTimeout) { clearTimeout(S.driftTimeout); S.driftTimeout = null; }
   if (fadeTimeout) { clearTimeout(fadeTimeout); fadeTimeout = null; }
+  if (graceTimeout) { clearTimeout(graceTimeout); graceTimeout = null; }
   resetDriftButtonState();
 }
 
@@ -723,14 +728,20 @@ function router() {
 
   const deadline = new Date(S.today.deadlineTime);
   if (now > deadline && !S.today.completed) {
-    if (now.toDateString() === todayStr) {
-      showScreen('active');
-      refreshActiveScreen();
-    } else {
-      S.today.missed = true;
-      save(KEYS.today, S.today);
+    const pastGrace = (now - deadline) > GRACE_MS;
+    if (now.toDateString() !== todayStr || pastGrace) {
+      // Either a different day, or same day but grace window has closed — fail it
+      if (!S.today.missed) {
+        addHistory({ date: S.today.date, task: S.today.task, completed: false });
+        S.today.missed = true;
+        save(KEYS.today, S.today);
+      }
       showScreen('missed');
       refreshMissedScreen();
+    } else {
+      // Same day, within grace window — land on active screen; tick handles the rest
+      showScreen('active');
+      refreshActiveScreen();
     }
     return;
   }
@@ -1243,13 +1254,78 @@ function showOverrideSignal(msg, autoTriggered = false) {
   escBox.style.opacity = '1';
   driftShownAt = Date.now();
 
-  if (S.driftLockInterval) clearInterval(S.driftLockInterval);
-
-  if (!autoTriggered && driftBtn) {
-    startDriftLock(15);
+  // Only touch the drift lock when we're about to start a new one.
+  // Auto-escalations must never kill an in-progress manual lock — that's
+  // what was leaving the button frozen on "Locked out (Xs)" indefinitely.
+  if (!autoTriggered) {
+    if (S.driftLockInterval) { clearInterval(S.driftLockInterval); S.driftLockInterval = null; }
+    if (driftBtn) startDriftLock(15);
   }
 
   scheduleDriftFade();
+}
+
+// Failure phrases — shown in the 10s grace window after deadline hits
+function getTimeUpMsg() {
+  const p = S.profile || {};
+  const msgs = [
+    `The clock ran out. You were there and you let it.`,
+    `Time's up. Not eventually. Right now. This is what it looks like.`,
+    `The window closed. You saw it coming.`,
+    `Gone. Every reason you had for later — that's over now.`,
+    p.drift
+      ? `This is "${p.drift}". Not as a threat. As a description of what just happened.`
+      : `This is the pattern running again. You can see it now.`,
+    p.stakes
+      ? `${p.stakes}. The deadline just passed on the thing you said was for them.`
+      : `You committed to this. You had the time. Here we are.`,
+    p.forward
+      ? `The version who reaches "${p.forward}" finished on days like this. You didn't. Yet.`
+      : `The day is still here. The deadline isn't.`,
+  ];
+  return _pick(msgs, 'timeup');
+}
+
+// Enter the 10-second grace window: partial button appears, failure phrase shows,
+// Mark Complete stays. After remainingMs, auto-navigate to missed screen.
+function enterGraceMode(remainingMs) {
+  const driftBtn = document.getElementById('drift-btn');
+  const escBox = document.getElementById('active-escalation-box');
+  const escMsg = document.getElementById('active-escalation-msg');
+
+  if (driftBtn) {
+    driftBtn.removeAttribute('disabled');
+    driftBtn.style.opacity = '1';
+    driftBtn.textContent = '◑ Partial — I got some of it';
+    driftBtn._graceMode = true;
+  }
+
+  if (escBox && escMsg) {
+    escMsg.textContent = getTimeUpMsg();
+    escBox.style.display = 'block';
+    escBox.offsetHeight;
+    escBox.style.opacity = '1';
+    driftShownAt = Date.now();
+  }
+
+  if (graceTimeout) clearTimeout(graceTimeout);
+  graceTimeout = setTimeout(() => {
+    graceTimeout = null;
+    if (S.currentScreen === 'active' && S.today && !S.today.completed) {
+      autoFailDay();
+    }
+  }, remainingMs);
+}
+
+// Log the day as missed and navigate to the missed screen.
+// Safe to call multiple times — checks completed/missed flags first.
+function autoFailDay() {
+  if (!S.today || S.today.completed || S.today.missed) return;
+  addHistory({ date: S.today.date, task: S.today.task, completed: false });
+  S.today.missed = true;
+  save(KEYS.today, S.today);
+  showScreen('missed');
+  refreshMissedScreen();
 }
 
 function startCountdown() {
@@ -1274,24 +1350,23 @@ function startCountdown() {
       if (S.timerInterval) clearInterval(S.timerInterval);
       if (S.driftTimeout) clearTimeout(S.driftTimeout);
       if (fadeTimeout) clearTimeout(fadeTimeout);
-      resetDriftButtonState();
-      
+
       setUrgency(5);
-      countEl.textContent = 'TIME';
+      if (countEl) countEl.textContent = 'TIME';
       if (subtextEl) subtextEl.textContent = 'time is up';
       if (progressEl) progressEl.style.width = '100%';
-      if (dot) {
-        dot.classList.remove('pulsing');
-        dot.classList.add('fast-pulse');
-      }
-      
-      if (escBox) {
-        escBox.style.opacity = '0';
-        escBox.style.display = 'none';
-      }
-      if (driftBtn) {
-        driftBtn.setAttribute('disabled', 'true');
-        driftBtn.style.opacity = '0.3';
+      if (dot) { dot.classList.remove('pulsing'); dot.classList.add('fast-pulse'); }
+
+      // Grace window logic — only fire once per time-is-up event
+      if (!graceTimeout) {
+        const overdue = -remaining; // ms past the deadline
+        if (overdue > GRACE_MS) {
+          // Already past the grace window — fail immediately (e.g. user reopens app late)
+          autoFailDay();
+        } else {
+          // Within grace window: show partial button + failure phrase, start countdown to auto-fail
+          enterGraceMode(GRACE_MS - overdue);
+        }
       }
       return;
     }
@@ -1348,6 +1423,13 @@ function markDone() {
 }
 
 function triggerWakeup() {
+  const driftBtn = document.getElementById('drift-btn');
+  // In grace mode the drift button has been repurposed as the partial button
+  if (driftBtn && driftBtn._graceMode) {
+    if (graceTimeout) { clearTimeout(graceTimeout); graceTimeout = null; }
+    missedPartial();
+    return;
+  }
   if (S.today && (new Date() > new Date(S.today.deadlineTime))) return;
   const currentLevel = Math.max(1, S.urgency);
   showOverrideSignal(getEscalationMsg(currentLevel), false);
@@ -1560,15 +1642,16 @@ document.addEventListener('visibilitychange', () => {
           if (S.timerInterval) clearInterval(S.timerInterval);
           if (S.driftTimeout) clearTimeout(S.driftTimeout);
           if (fadeTimeout) clearTimeout(fadeTimeout);
-          resetDriftButtonState();
           setUrgency(5);
           if (countEl) countEl.textContent = 'TIME';
           if (subtextEl) subtextEl.textContent = 'time is up';
           if (progressEl) progressEl.style.width = '100%';
           if (dot) { dot.classList.remove('pulsing'); dot.classList.add('fast-pulse'); }
-          const escBox = document.getElementById('active-escalation-box');
-          if (escBox) { escBox.style.opacity = '0'; escBox.style.display = 'none'; }
-          if (driftBtn) { driftBtn.setAttribute('disabled', 'true'); driftBtn.style.opacity = '0.3'; }
+          if (!graceTimeout) {
+            const overdue = -remaining;
+            if (overdue > GRACE_MS) { autoFailDay(); }
+            else { enterGraceMode(GRACE_MS - overdue); }
+          }
           return;
         }
 
