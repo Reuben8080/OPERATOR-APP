@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="OPERATOR">
   <link rel="manifest" href="manifest.json">
-  <link class="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>OPERATOR</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
@@ -328,11 +328,21 @@
     </div>
 
     <div class="scroll-area">
-      <div id="ob-questions"></div>
+      <div id="ob-intro" class="gap16" style="margin-bottom:28px;">
+        <div>
+          <div class="label">before we start</div>
+          <div class="mt8 big-text serif" style="max-width:14ch;">What's the thing you're most trying not to repeat?</div>
+        </div>
+        <div class="label" style="line-height:1.7; max-width:34ch;">
+          A small daily loop for the version of you that keeps promising to start again tomorrow.
+        </div>
+        <button class="btn btn-primary" id="ob-start-btn">Start →</button>
+      </div>
+      <div id="ob-questions" style="display:none;"></div>
     </div>
 
     <div class="mt16 gap8">
-      <button class="btn btn-primary" id="ob-next-btn">Continue →</button>
+      <button class="btn btn-primary" id="ob-next-btn" style="display:none;">Continue →</button>
       <button class="btn btn-ghost" id="ob-back-btn" style="display:none">← Back</button>
     </div>
   </div>
@@ -344,8 +354,8 @@
     </div>
 
     <div class="flex1 scroll-area">
-      <div class="label">tonight's commitment</div>
-      <div class="mt8 big-text serif">What's the one thing<br>tomorrow needs?</div>
+      <div class="label" id="commit-label">tonight's commitment</div>
+      <div class="mt8 big-text serif" id="commit-prompt">What's the one thing<br>tomorrow needs?</div>
 
       <div class="mt28">
         <textarea class="input-field" id="commit-text" rows="3" placeholder="The one thing. Not a list."></textarea>
@@ -364,7 +374,7 @@
 
     <div class="mt16">
       <button class="btn btn-primary" id="commit-btn">Set commitment →</button>
-      <div class="swipe-hint mt8">This locks in. Tomorrow-you executes, doesn't negotiate.</div>
+      <div class="swipe-hint mt8" id="commit-hint">This locks in. Tomorrow-you executes, doesn't negotiate.</div>
     </div>
   </div>
 
@@ -391,8 +401,8 @@
     </div>
 
     <div class="gap8">
-      <button class="btn btn-secondary" id="morning-share-btn" style="display:none;">📤 Send to witness</button>
       <button class="btn btn-primary" id="morning-open-btn">I'm starting — Open ↗</button>
+      <button class="btn btn-secondary" id="witness-share-btn" style="display:none;">Send to witness ↗</button>
       <div class="label" style="text-align:center">Timestamps when you log this.</div>
     </div>
   </div>
@@ -493,6 +503,22 @@
 
     <div class="mt16 gap8">
       <button class="btn btn-secondary" id="commit-tomorrow-btn">Set tomorrow's commitment →</button>
+      <button class="btn btn-ghost" id="history-btn">View history →</button>
+    </div>
+  </div>
+
+  <div id="screen-history" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <button class="btn btn-ghost" id="history-back-btn" style="width:auto; padding:0; font-size:11px;">← Back</button>
+    </div>
+
+    <div class="flex1 scroll-area">
+      <div class="label">history</div>
+      <div class="mt8 big-text serif" style="font-size:clamp(24px,6vw,32px);">What actually happened</div>
+      <div class="mt12 label" id="history-summary">90 days max. Hits, misses, partials.</div>
+      <div class="mt20 gap12" id="history-list"></div>
+      <div id="history-empty" class="mt20 label" style="display:none; text-align:center;">No history yet.</div>
     </div>
   </div>
 
@@ -535,7 +561,8 @@ const S = {
   urgency: 0,
   timerInterval: null,
   driftTimeout: null,
-  driftLockInterval: null 
+  driftLockInterval: null,
+  historyReturnScreen: null
 };
 
 let currentUrgencyLevel = 0;
@@ -571,15 +598,17 @@ function getStreak() {
     .filter(d => { if (seen.has(d.date)) return false; seen.add(d.date); return true; })
     .sort((a,b) => new Date(b.date) - new Date(a.date));
 
-  // Fix morning streak reset: check if today already has a recorded complete entry.
-  // If it doesn't, calculate the expected streak offset starting from yesterday.
-  const hasCompletedToday = sorted.length > 0 && new Date(sorted[0].date).toDateString() === new Date().toDateString();
-  const startOffset = hasCompletedToday ? 0 : 1;
+  const today = new Date();
+  const anchor = new Date(today);
+  const hasTodayCompletion = sorted.some(entry => new Date(entry.date).toDateString() === today.toDateString());
+  if (!hasTodayCompletion) {
+    anchor.setDate(anchor.getDate() - 1);
+  }
 
   for (let i = 0; i < sorted.length; i++) {
     const d = new Date(sorted[i].date);
-    const expected = new Date();
-    expected.setDate(expected.getDate() - (i + startOffset));
+    const expected = new Date(anchor);
+    expected.setDate(expected.getDate() - i);
     if (d.toDateString() === expected.toDateString()) streak++;
     else break;
   }
@@ -625,11 +654,13 @@ function router() {
   if (!S.today || S.today.date !== todayStr) {
     if (S.today && S.today.date !== todayStr) {
       if (!S.today.completed) {
-        addHistory({ date: S.today.date, task: S.today.task, completed: false });
+        // Mark as missed so the missed screen can show — don't wipe yet
+        addHistory({ date: S.today.date, task: S.today.task, completed: false, partial: false, missed: true });
         S.today.missed = true;
-        S.today.date = todayStr;
+        S.today.date = todayStr; // prevent re-triggering on subsequent router calls
         save(KEYS.today, S.today);
       } else {
+        // Completed days: safe to clear
         S.today = null;
         save(KEYS.today, null);
       }
@@ -717,6 +748,7 @@ function setUrgency(level) {
 // PERSONALIZED ESCALATION MESSAGES
 // =====================================================
 
+// Recency avoidance — track last index shown per urgency level
 const _lastMsgIdx = {};
 
 function _pick(arr, levelKey) {
@@ -728,55 +760,95 @@ function _pick(arr, levelKey) {
   return arr[idx];
 }
 
+// Auto-escalation messages — triggered by urgency level crossing a threshold
 function getEscalationMsg(urgency) {
   if (!S.profile) return "Clock's running.";
   const p = S.profile;
 
   const msgs = {
+    // Level 1 — past 50%, still time, early nudge
     1: [
       `You set this last night. That version of you was right.`,
       `Momentum is easier to keep than restart. You still have it.`,
       `The task won't feel more appealing later. That's not how this works.`,
       `Every hour without movement is a vote for the old pattern.`,
-      p.drift ? `Notice anything? This is the part where "${p.drift}" usually starts.` : `You're in the comfortable zone. That's where plans go to live forever.`,
-      p.stakes ? `Think about ${p.stakes}. This is for them.` : `Clock at 50%. This is the moment you usually find a reason to defer.`,
-      p.forward ? `The path to "${p.forward}" runs through today. Start running it.` : `Halfway there. The boring middle is exactly where it went wrong before.`,
+      p.drift
+        ? `Notice anything? This is the part where "${p.drift}" usually starts.`
+        : `You're in the comfortable zone. That's where plans go to live forever.`,
+      p.stakes
+        ? `Think about ${p.stakes}. This is for them.`
+        : `Clock at 50%. This is the moment you usually find a reason to defer.`,
+      p.forward
+        ? `The path to "${p.forward}" runs through today. Start running it.`
+        : `Halfway there. The boring middle is exactly where it went wrong before.`,
     ],
+
+    // Level 2 — under 50%, window narrowing
     2: [
       `The window is closing. Not slowly anymore.`,
       `Comfort is not a deadline extension.`,
       `You know what the next step is. That's not the problem. Do it anyway.`,
       `The version of you who doesn't finish — when did they decide? Probably around now.`,
-      p.drift ? `This is how "${p.drift}" started. You can see it happening.` : `Recognize this feeling? You've been here before.`,
-      p.stakes ? `${p.stakes} — that's what's on the line. Not the streak. Not a score.` : `Time is running. This is real.`,
-      p.forward ? `"${p.forward}" doesn't happen on days where you let the window close.` : `The gap between intention and action closes one way or the other. Choose which.`,
+      p.drift
+        ? `This is how "${p.drift}" started. You can see it happening.`
+        : `Recognize this feeling? You've been here before.`,
+      p.stakes
+        ? `${p.stakes} — that's what's on the line. Not the streak. Not a score.`
+        : `Time is running. This is real.`,
+      p.forward
+        ? `"${p.forward}" doesn't happen on days where you let the window close.`
+        : `The gap between intention and action closes one way or the other. Choose which.`,
     ],
+
+    // Level 3 — under 25%, more than 30 min left
     3: [
       `This is the exact moment you've let slip before. Not this time.`,
       `You have enough time. You've always had enough time at this point. Use it.`,
       `One decision: move. Everything else follows from that.`,
       `The excuses are getting creative. That's a sign.`,
-      p.drift ? `"${p.drift}" — one word. That's what today becomes if you don't redirect now.` : `One hour left. Move.`,
-      p.stakes ? `${p.stakes} is the reason. Not the app, not the streak — them.` : `This is not the version of you that quits.`,
-      p.forward ? `In five years you won't remember why you stalled. Just whether you finished.` : `The resistance isn't a signal to stop. It's the work starting.`,
+      p.drift
+        ? `"${p.drift}" — one word. That's what today becomes if you don't redirect now.`
+        : `One hour left. Move.`,
+      p.stakes
+        ? `${p.stakes} is the reason. Not the app, not the streak — them.`
+        : `This is not the version of you that quits.`,
+      p.forward
+        ? `In five years you won't remember why you stalled. Just whether you finished.`
+        : `The resistance isn't a signal to stop. It's the work starting.`,
     ],
+
+    // Level 4 — under 30 min
     4: [
       `Thirty minutes. Real work happens in thirty minutes. This is not theory.`,
       `Drop the optimization. Drop the prep. The only move is the move.`,
       `You've come back from worse than this with less time. Go.`,
       `The story you tell tomorrow starts in the next ten minutes.`,
-      p.drift ? `You said you'd never repeat "${p.drift}". Today is the day that claim is tested.` : `Last chance. No softening.`,
-      p.stakes ? `${p.stakes}. Not the streak. Not this app. Them. Go.` : `This is where it counts. Right now.`,
-      p.forward ? `Five years from now — "${p.forward}" — this exact window matters.` : `The people who finish don't feel differently than you do right now. They just move.`,
+      p.drift
+        ? `You said you'd never repeat "${p.drift}". Today is the day that claim is tested.`
+        : `Last chance. No softening.`,
+      p.stakes
+        ? `${p.stakes}. Not the streak. Not this app. Them. Go.`
+        : `This is where it counts. Right now.`,
+      p.forward
+        ? `Five years from now — "${p.forward}" — this exact window matters.`
+        : `The people who finish don't feel differently than you do right now. They just move.`,
     ],
+
+    // Level 5 — time's up
     5: [
       `This isn't judgment. This is data. You know what to do tomorrow.`,
       `The day closed. A pattern is a data point, not a sentence.`,
       `One miss doesn't define it. A streak of misses does. Tomorrow is a different day.`,
       `What you do in the next ten minutes still matters. Even today.`,
-      p.drift ? `"${p.drift}" — that's in the past. Today doesn't have to be the same story.` : `The day ended. Tomorrow is blank.`,
-      p.stakes ? `${p.stakes} is still there. The deadline passed. The reason didn't.` : `Not finished. Not yet.`,
-      p.forward ? `The version of you who reaches "${p.forward}" didn't miss many days. Just most. Tomorrow matters.` : `The gap between where you are and where you want to be is made of days exactly like this one.`,
+      p.drift
+        ? `"${p.drift}" — that's in the past. Today doesn't have to be the same story.`
+        : `The day ended. Tomorrow is blank.`,
+      p.stakes
+        ? `${p.stakes} is still there. The deadline passed. The reason didn't.`
+        : `Not finished. Not yet.`,
+      p.forward
+        ? `The version of you who reaches "${p.forward}" didn't miss many days. Just most. Tomorrow matters.`
+        : `The gap between where you are and where you want to be is made of days exactly like this one.`,
     ],
   };
 
@@ -784,6 +856,8 @@ function getEscalationMsg(urgency) {
   return _pick(arr, `esc_${urgency}`);
 }
 
+// Snap-back messages — only for manual drift button taps
+// Sharper tone: the user just admitted they're drifting and asked to be pulled back
 function getDriftSnapMsg() {
   if (!S.profile) return "You pressed it. Now act on it.";
   const p = S.profile;
@@ -797,9 +871,15 @@ function getDriftSnapMsg() {
     `You caught it. That's the whole game. Don't waste the catch.`,
     `The resistance you're feeling is not a sign to stop. It's the work.`,
     `You came back to this screen for a reason. Trust that version of you.`,
-    p.drift ? `This is "${p.drift}" territory. You know how it ends if you don't turn now.` : `You know what you're avoiding. The task hasn't changed.`,
-    p.stakes ? `${p.stakes}. That's the reason. Everything else right now is noise.` : `You know what the next step is. You've known for a while.`,
-    p.forward ? `The version who reaches "${p.forward}" pressed this button too. Then they went back to work.` : `You don't need to want to do it. You just need to do it.`,
+    p.drift
+      ? `This is "${p.drift}" territory. You know how it ends if you don't turn now.`
+      : `You know what you're avoiding. The task hasn't changed.`,
+    p.stakes
+      ? `${p.stakes}. That's the reason. Everything else right now is noise.`
+      : `You know what the next step is. You've known for a while.`,
+    p.forward
+      ? `The version who reaches "${p.forward}" pressed this button too. Then they went back to work.`
+      : `You don't need to want to do it. You just need to do it.`,
   ];
 
   return _pick(snaps, `drift_snap`);
@@ -816,11 +896,41 @@ function getGhostText() {
 // =====================================================
 
 const OB_QUESTIONS = [
-  { key: 'drift', question: "What's the thing you're most trying to not repeat?", sub: 'Be honest with yourself here.', type: 'textarea', placeholder: 'The pattern, the failure, the drift...' },
-  { key: 'stakes', question: 'Who are you doing this for, ultimately?', sub: 'Could be yourself. Could be someone specific.', type: 'text', placeholder: 'A name, a reason, or both...' },
-  { key: 'activeWindow', question: 'What time of day do you actually come alive?', sub: "We'll set your active window around this.", type: 'select', options: ['Early morning (5–9am)', 'Late morning (9am–12pm)', 'Afternoon (12–5pm)', 'Evening (5–10pm)', 'Night (10pm+)'] },
-  { key: 'override', question: 'When you stall, what pulls you back?', sub: 'Pick the one that actually works.', type: 'chips', options: ['Family / real stakes', 'Time running out', 'Someone watching', 'Fear of repeating the past', 'Imagining future me'] },
-  { key: 'forward', question: 'In 5 years — what does the version of you look like that made it?', sub: "Don't be modest.", type: 'text', placeholder: 'That version of me is...' },
+  {
+    key: 'drift',
+    question: "What's the thing you're most trying to not repeat?",
+    sub: 'Be honest with yourself here.',
+    type: 'textarea',
+    placeholder: 'The pattern, the failure, the drift...',
+  },
+  {
+    key: 'stakes',
+    question: 'Who are you doing this for, ultimately?',
+    sub: 'Could be yourself. Could be someone specific.',
+    type: 'text',
+    placeholder: 'A name, a reason, or both...',
+  },
+  {
+    key: 'activeWindow',
+    question: 'What time of day do you actually come alive?',
+    sub: "We'll set your active window around this.",
+    type: 'select',
+    options: ['Early morning (5–9am)', 'Late morning (9am–12pm)', 'Afternoon (12–5pm)', 'Evening (5–10pm)', 'Night (10pm+)'],
+  },
+  {
+    key: 'override',
+    question: 'When you stall, what pulls you back?',
+    sub: 'Pick the one that actually works.',
+    type: 'chips',
+    options: ['Family / real stakes', 'Time running out', 'Someone watching', 'Fear of repeating the past', 'Imagining future me'],
+  },
+  {
+    key: 'forward',
+    question: 'In 5 years — what does the version of you look like that made it?',
+    sub: "Don't be modest.",
+    type: 'text',
+    placeholder: 'That version of me is...',
+  },
 ];
 
 let obStep = 0;
@@ -829,6 +939,25 @@ let obAnswers = {};
 function initOnboarding() {
   obStep = 0;
   obAnswers = {};
+  const intro = document.getElementById('ob-intro');
+  const questions = document.getElementById('ob-questions');
+  const nextBtn = document.getElementById('ob-next-btn');
+  if (intro) intro.style.display = 'flex';
+  if (questions) {
+    questions.style.display = 'none';
+    questions.innerHTML = '';
+  }
+  if (nextBtn) nextBtn.style.display = 'none';
+  renderObDots();
+}
+
+function startOnboarding() {
+  const intro = document.getElementById('ob-intro');
+  const questions = document.getElementById('ob-questions');
+  const nextBtn = document.getElementById('ob-next-btn');
+  if (intro) intro.style.display = 'none';
+  if (questions) questions.style.display = 'block';
+  if (nextBtn) nextBtn.style.display = 'flex';
   renderObQuestion();
 }
 
@@ -937,9 +1066,46 @@ function obBack() {
 // COMMIT SCREEN
 // =====================================================
 
+function getCommitFraming() {
+  const now = new Date();
+  const timeVal = document.getElementById('commit-time')?.value || '17:00';
+  const [h, m] = timeVal.split(':').map(Number);
+  const deadline = new Date(now);
+  deadline.setHours(h, m, 0, 0);
+  if (deadline < now) deadline.setDate(deadline.getDate() + 1);
+
+  const msUntil = deadline - now;
+  const today = deadline.toDateString() === now.toDateString();
+  let label = today ? "today's commitment" : "tomorrow's commitment";
+  let prompt = today ? "What's the one thing\ntoday needs?" : "What's the one thing\ntomorrow needs?";
+  let hint = today ? "This locks in. Today-you executes, doesn't negotiate." : "This locks in. Tomorrow-you executes, doesn't negotiate.";
+
+  if (today) {
+    if (msUntil <= 6 * 60 * 60 * 1000) {
+      label = "this afternoon's commitment";
+      prompt = "What's the one thing\nthat needs to happen?";
+      hint = "The window is close. Keep it simple.";
+    } else if (now.getHours() < 11) {
+      label = "today's commitment";
+      prompt = "What's the one thing\ntoday needs?";
+    }
+  }
+
+  return { label, prompt, hint };
+}
+
 function refreshCommitScreen() {
   const streak = getStreak();
+  const labelEl = document.getElementById('commit-label');
+  const promptEl = document.getElementById('commit-prompt');
+  const hintEl = document.getElementById('commit-hint');
+  const frame = getCommitFraming();
+
   document.getElementById('streak-commit').textContent = streak > 0 ? `${streak} day streak` : '—';
+  if (labelEl) labelEl.textContent = frame.label;
+  if (promptEl) promptEl.innerHTML = frame.prompt.replace(/
+/g, '<br>');
+  if (hintEl) hintEl.textContent = frame.hint;
 }
 
 function submitCommit() {
@@ -969,6 +1135,7 @@ function submitCommit() {
     completed: false,
     dayClosed: false,
     missed: false,
+    partial: false,
     witness,
     reflection: '',
     blocker: '',
@@ -977,6 +1144,7 @@ function submitCommit() {
   save(KEYS.today, S.today);
   document.getElementById('commit-text').value = '';
   document.getElementById('commit-witness').value = '';
+  refreshCommitScreen();
   router();
 }
 
@@ -995,17 +1163,31 @@ function refreshMorningScreen() {
     ghostEl.textContent = `"${ghost}"`;
     ghostEl.style.opacity = '1';
   }
-
-  // Witness Share API logic modification: Clean, non-intrusive action choice
-  const shareBtn = document.getElementById('morning-share-btn');
-  if (S.today.witness) {
-    shareBtn.style.display = 'flex';
-    shareBtn.textContent = `📤 Send to witness (${S.today.witness})`;
-  } else {
-    shareBtn.style.display = 'none';
+  const shareBtn = document.getElementById('witness-share-btn');
+  if (shareBtn) {
+    shareBtn.style.display = S.today.witness ? 'flex' : 'none';
   }
-
   setUrgency(0);
+}
+
+async function shareWitness() {
+  if (!S.today || !S.today.witness) return;
+  const deadline = new Date(S.today.deadlineTime);
+  const deadlineLabel = deadline.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const message = `${S.today.witness}, today's commitment: "${S.today.task}". Due by ${deadlineLabel}.`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'OPERATOR', text: message });
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(message);
+      alert('Witness note copied to clipboard.');
+    }
+  } catch (err) {
+    console.log('Share dismissed or unavailable.', err);
+  }
 }
 
 function openCommitment() {
@@ -1081,7 +1263,7 @@ function showOverrideSignal(msg, autoTriggered = false) {
 
   escMsg.textContent = msg;
   escBox.style.display = 'block';
-  escBox.offsetHeight; 
+  escBox.offsetHeight; // Force layout pass reflow
   escBox.style.opacity = '1';
   driftShownAt = Date.now();
 
@@ -1094,86 +1276,82 @@ function showOverrideSignal(msg, autoTriggered = false) {
   scheduleDriftFade();
 }
 
-function startCountdown() {
-  if (S.timerInterval) clearInterval(S.timerInterval);
+function syncActiveCountdown() {
+  if (!S.today) return 0;
+  const now = new Date();
+  const deadline = new Date(S.today.deadlineTime);
+  const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
+  const totalMs = deadline - start;
+  const remaining = deadline - now;
+  const countEl = document.getElementById('active-countdown');
+  const progressEl = document.getElementById('active-progress');
+  const subtextEl = document.getElementById('active-subtext');
+  const escBox = document.getElementById('active-escalation-box');
+  const dot = document.getElementById('active-dot');
+  const driftBtn = document.getElementById('drift-btn');
 
-  function tick() {
-    if (!S.today) return;
-    const now = new Date();
-    const deadline = new Date(S.today.deadlineTime);
-    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
-    const totalMs = deadline - start;
-    const remaining = deadline - now;
+  if (remaining <= 0) {
+    if (S.timerInterval) clearInterval(S.timerInterval);
+    if (S.driftTimeout) clearTimeout(S.driftTimeout);
+    if (fadeTimeout) clearTimeout(fadeTimeout);
+    resetDriftButtonState();
 
-    const countEl = document.getElementById('active-countdown');
-    const progressEl = document.getElementById('active-progress');
-    const subtextEl = document.getElementById('active-subtext');
-    const escBox = document.getElementById('active-escalation-box');
-    const dot = document.getElementById('active-dot');
-    const driftBtn = document.getElementById('drift-btn');
-
-    if (remaining <= 0) {
-      if (S.timerInterval) clearInterval(S.timerInterval);
-      if (S.driftTimeout) clearTimeout(S.driftTimeout);
-      if (fadeTimeout) clearTimeout(fadeTimeout);
-      resetDriftButtonState();
-      
-      setUrgency(5);
-      countEl.textContent = 'TIME';
-      if (subtextEl) subtextEl.textContent = 'time is up';
-      if (progressEl) progressEl.style.width = '100%';
-      if (dot) {
-        dot.classList.remove('pulsing');
-        dot.classList.add('fast-pulse');
-      }
-      
-      if (escBox) {
-        escBox.style.opacity = '0';
-        escBox.style.display = 'none';
-      }
-      if (driftBtn) {
-        driftBtn.setAttribute('disabled', 'true');
-        driftBtn.style.opacity = '0.3';
-      }
-      return;
-    }
-
-    const urgency = calcUrgency(remaining, totalMs);
-    setUrgency(urgency);
-
-    const h = Math.floor(remaining / 3600000);
-    const min = Math.floor((remaining % 3600000) / 60000);
-    const sec = Math.floor((remaining % 60000) / 1000);
-    if (h > 0) {
-      countEl.textContent = `${h}h ${String(min).padStart(2,'0')}m`;
-    } else {
-      countEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-    }
-
-    const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
-    if (progressEl) progressEl.style.width = pct + '%';
-
-    const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
-    if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
-
+    setUrgency(5);
+    if (countEl) countEl.textContent = 'TIME';
+    if (subtextEl) subtextEl.textContent = 'time is up';
+    if (progressEl) progressEl.style.width = '100%';
     if (dot) {
-      dot.classList.remove('pulsing', 'fast-pulse');
-      if (urgency >= 4) dot.classList.add('fast-pulse');
-      else if (urgency >= 2) dot.classList.add('pulsing');
+      dot.classList.remove('pulsing');
+      dot.classList.add('fast-pulse');
     }
 
-    if (urgency > currentUrgencyLevel) {
-      currentUrgencyLevel = urgency;
-      if (urgency >= 1) {
-        showOverrideSignal(getEscalationMsg(urgency), true);
-      }
-    } else if (urgency < currentUrgencyLevel) {
-      currentUrgencyLevel = urgency;
+    if (escBox) {
+      escBox.style.opacity = '0';
+      escBox.style.display = 'none';
     }
+    if (driftBtn) {
+      driftBtn.setAttribute('disabled', 'true');
+      driftBtn.style.opacity = '0.3';
+    }
+    return 5;
   }
 
-  tick();
-  S.timerInterval = setInterval(tick, 1000);
+  const urgency = calcUrgency(remaining, totalMs);
+  setUrgency(urgency);
+
+  const h = Math.floor(remaining / 3600000);
+  const min = Math.floor((remaining % 3600000) / 60000);
+  const sec = Math.floor((remaining % 60000) / 1000);
+  if (countEl) countEl.textContent = h > 0 ? `${h}h ${String(min).padStart(2,'0')}m` : `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+
+  const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
+  if (progressEl) progressEl.style.width = pct + '%';
+
+  const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
+  if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
+
+  if (dot) {
+    dot.classList.remove('pulsing', 'fast-pulse');
+    if (urgency >= 4) dot.classList.add('fast-pulse');
+    else if (urgency >= 2) dot.classList.add('pulsing');
+  }
+
+  if (urgency > currentUrgencyLevel) {
+    currentUrgencyLevel = urgency;
+    if (urgency >= 1) {
+      showOverrideSignal(getEscalationMsg(urgency), true);
+    }
+  } else {
+    currentUrgencyLevel = urgency;
+  }
+
+  return urgency;
+}
+
+function startCountdown() {
+  if (S.timerInterval) clearInterval(S.timerInterval);
+  syncActiveCountdown();
+  S.timerInterval = setInterval(syncActiveCountdown, 1000);
 }
 
 function markDone() {
@@ -1192,7 +1370,7 @@ function markDone() {
 function triggerWakeup() {
   if (S.today && (new Date() > new Date(S.today.deadlineTime))) return;
   const currentLevel = Math.max(1, S.urgency);
-  showOverrideSignal(getDriftSnapMsg(), false);
+  showOverrideSignal(getEscalationMsg(currentLevel), false);
 }
 
 // =====================================================
@@ -1223,7 +1401,7 @@ function closeDay() {
   S.today.blocker = block;
   S.today.dayClosed = true;
   save(KEYS.today, S.today);
-  addHistory({ date: S.today.date, task: S.today.task, completed: true, reflection: ref });
+  addHistory({ date: S.today.date, task: S.today.task, completed: true, partial: !!S.today.partial, reflection: ref, blocker: block });
   router();
 }
 
@@ -1239,12 +1417,67 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function formatHistoryDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function refreshHistoryScreen() {
+  const entries = getHistory().slice(0, 90);
+  const list = document.getElementById('history-list');
+  const empty = document.getElementById('history-empty');
+  const summary = document.getElementById('history-summary');
+  if (!list || !empty || !summary) return;
+
+  list.innerHTML = '';
+  if (!entries.length) {
+    empty.style.display = 'block';
+    summary.textContent = 'No history yet.';
+    return;
+  }
+
+  empty.style.display = 'none';
+  const hits = entries.filter(e => e.completed).length;
+  const misses = entries.filter(e => !e.completed).length;
+  const partials = entries.filter(e => e.partial).length;
+  summary.textContent = `${entries.length} day${entries.length === 1 ? '' : 's'} logged • ${hits} complete • ${partials} partial • ${misses} missed`;
+
+  entries.forEach(entry => {
+    const statusLabel = entry.completed ? (entry.partial ? 'partial win' : 'hit') : 'missed';
+    const card = document.createElement('div');
+    card.className = 'done-card';
+    card.innerHTML = `
+      <div class="label">${formatHistoryDate(entry.date)} · ${statusLabel}</div>
+      <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:18px;line-height:1.4;">${escHtml(entry.task || '')}</div>
+      ${entry.reflection ? `<div class="label mt12">what happened</div><div class="mt4" style="font-size:13px;color:var(--text2);line-height:1.6;">${escHtml(entry.reflection)}</div>` : ''}
+      ${entry.blocker ? `<div class="label mt12">blocker</div><div class="mt4" style="font-size:13px;color:var(--text2);line-height:1.6;">${escHtml(entry.blocker)}</div>` : ''}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function showHistoryScreen() {
+  S.historyReturnScreen = S.currentScreen || 'closed';
+  showScreen('history');
+  refreshHistoryScreen();
+}
+
+function returnFromHistory() {
+  const target = S.historyReturnScreen || 'closed';
+  S.historyReturnScreen = null;
+  showScreen(target);
+  if (target === 'closed') refreshClosedScreen();
+  else if (target === 'complete') refreshCompleteScreen();
+  else if (target === 'morning') refreshMorningScreen();
+  else if (target === 'active') refreshActiveScreen();
+  else if (target === 'commit') refreshCommitScreen();
+}
+
 function refreshClosedScreen() {
   if (!S.today) return;
   const streak = getStreak();
   document.getElementById('streak-closed').textContent = `${streak} day streak`;
-  const hour = new Date().getHours();
-  const msgs = ['Sharp execution.', 'That\'s how it\'s done.', 'Good work.', 'Locked in.', 'Consistent.'];
+  const msgs = ['Sharp execution.', 'That's how it's done.', 'Good work.', 'Locked in.', 'Consistent.'];
   document.getElementById('closed-msg').textContent = msgs[streak % msgs.length];
   document.getElementById('closed-summary').innerHTML = `
     <div class="label">what you did</div>
@@ -1273,6 +1506,7 @@ function refreshMissedScreen() {
 
 function missedCommit() {
   if (S.today) {
+    // History already logged by router when the date rolled over — don't log again
     S.today = null;
     save(KEYS.today, null);
   }
@@ -1284,6 +1518,7 @@ function missedCommit() {
 function missedPartial() {
   if (!S.today) return;
   S.today.completed = true;
+  S.today.partial = true;
   S.today.completedTime = new Date().toISOString();
   save(KEYS.today, S.today);
   setUrgency(0);
@@ -1294,27 +1529,21 @@ function missedPartial() {
 // EVENT BINDINGS
 // =====================================================
 
+document.getElementById('ob-start-btn').addEventListener('click', startOnboarding);
 document.getElementById('ob-next-btn').addEventListener('click', obNext);
 document.getElementById('ob-back-btn').addEventListener('click', obBack);
 document.getElementById('commit-btn').addEventListener('click', submitCommit);
+document.getElementById('commit-time').addEventListener('input', refreshCommitScreen);
 document.getElementById('morning-open-btn').addEventListener('click', openCommitment);
+document.getElementById('witness-share-btn').addEventListener('click', shareWitness);
 document.getElementById('done-btn').addEventListener('click', markDone);
 document.getElementById('drift-btn').addEventListener('click', triggerWakeup);
 document.getElementById('close-day-btn').addEventListener('click', closeDay);
 document.getElementById('commit-tomorrow-btn').addEventListener('click', () => { showScreen('commit'); refreshCommitScreen(); });
+document.getElementById('history-btn').addEventListener('click', showHistoryScreen);
+document.getElementById('history-back-btn').addEventListener('click', returnFromHistory);
 document.getElementById('missed-commit-btn').addEventListener('click', missedCommit);
 document.getElementById('missed-partial-btn').addEventListener('click', missedPartial);
-
-document.getElementById('morning-share-btn').addEventListener('click', () => {
-  if (navigator.share && S.today) {
-    navigator.share({
-      title: 'OPERATOR Commitment',
-      text: `My OPERATOR target today: "${S.today.task}". You are my explicit witness.`,
-    }).catch(err => console.log("Share dismissed or failed.", err));
-  } else {
-    alert(`Web Share API unsupported on this browser. Notify ${S.today.witness} manually.`);
-  }
-});
 
 document.getElementById('commit-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitCommit(); }
@@ -1326,7 +1555,7 @@ if (typeof navigator.serviceWorker !== 'undefined') {
   });
 }
 
-// Fixed Visibility Change Handler — Deduplicated and captures background state changes cleanly
+// Re-anchor timers when Android brings the app back to foreground
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     if (driftShownAt) {
@@ -1339,12 +1568,15 @@ document.addEventListener('visibilitychange', () => {
     }
 
     if (S.currentScreen === 'active' && S.today && S.today.started && !S.today.completed) {
-      startCountdown(); 
+      if (S.timerInterval) clearInterval(S.timerInterval);
+      syncActiveCountdown();
+      S.timerInterval = setInterval(syncActiveCountdown, 1000);
     }
   }
 });
 
 router();
+
 </script>
 </body>
 </html>
