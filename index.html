@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FAFAF8" id="tc">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OPERATOR">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>OPERATOR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #FAFAF8;
+      --bg2: #F3F2EE;
+      --text: #1C1C1A;
+      --text2: #7A7A74;
+      --accent: #3D6B2C;
+      --accent-light: #EBF3E6;
+      --border: rgba(28,28,26,0.1);
+      --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      --trans: all 1.8s cubic-bezier(0.4, 0, 0.2, 1);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bot: env(safe-area-inset-bottom, 0px);
+    }
+
+    /* Urgency states — the world bleeds darker */
+    [data-urgency="1"] { --bg:#FFF8EE; --bg2:#FFF0DC; --text:#1C1C1A; --text2:#8A6A40; --accent:#C96B00; --accent-light:#FFF0DC; --border:rgba(201,107,0,0.15); }
+    [data-urgency="2"] { --bg:#FFE8D0; --bg2:#FFD4B0; --text:#1C1C1A; --text2:#9A5020; --accent:#C93800; --accent-light:#FFD4B0; --border:rgba(201,56,0,0.2); }
+    [data-urgency="3"] { --bg:#FF4420; --bg2:#E03010; --text:#FAFAF8; --text2:rgba(250,250,248,0.65); --accent:#FAFAF8; --accent-light:rgba(255,255,255,0.15); --border:rgba(255,255,255,0.2); }
+    [data-urgency="4"] { --bg:#8B0000; --bg2:#6A0000; --text:#FAFAF8; --text2:rgba(250,250,248,0.6); --accent:#FFD060; --accent-light:rgba(255,208,96,0.15); --border:rgba(255,208,96,0.2); }
+    [data-urgency="5"] { --bg:#080808; --bg2:#111111; --text:#FAFAF8; --text2:rgba(250,250,248,0.45); --accent:#CC1111; --accent-light:rgba(204,17,17,0.12); --border:rgba(204,17,17,0.2); }
+
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      transition: var(--trans);
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: var(--grain);
+      background-size: 200px 200px;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.5;
+    }
+
+    #app {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding-top: calc(var(--safe-top) + 16px);
+      padding-bottom: calc(var(--safe-bot) + 16px);
+      padding-left: 28px;
+      padding-right: 28px;
+      transition: var(--trans);
+    }
+
+    .screen { display: none; height: 100%; flex-direction: column; animation: fadeIn 0.5s ease; }
+    .screen.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ——— TYPOGRAPHY ——— */
+    .serif { font-family: 'Instrument Serif', serif; }
+    .mono { font-family: 'DM Mono', monospace; }
+
+    .label {
+      font-size: 10px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--text2);
+      font-weight: 500; transition: color 1.8s ease;
+    }
+    .big-text {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(28px, 7vw, 38px);
+      line-height: 1.2;
+      color: var(--text);
+      transition: color 1.8s ease;
+    }
+    .commitment-display {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(22px, 5.5vw, 30px);
+      line-height: 1.3;
+      color: var(--text);
+      transition: color 1.8s ease;
+      font-style: italic;
+    }
+    .timer-display {
+      font-family: 'DM Mono', monospace;
+      font-size: clamp(36px, 10vw, 56px);
+      font-weight: 300;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      transition: color 1.8s ease;
+    }
+
+    /* ——— BUTTONS ——— */
+    .btn {
+      display: flex; align-items: center; justify-content: center;
+      padding: 18px 28px; border-radius: 14px;
+      font-family: 'DM Mono', monospace; font-size: 13px;
+      font-weight: 500; letter-spacing: 0.05em;
+      cursor: pointer; border: none; outline: none;
+      transition: all 0.2s ease; -webkit-appearance: none;
+      width: 100%;
+    }
+    .btn-primary {
+      background: var(--text); color: var(--bg);
+      transition: background 1.8s ease, color 1.8s ease, transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-secondary {
+      background: var(--accent-light); color: var(--accent);
+      border: 1px solid var(--border);
+      transition: var(--trans), transform 0.15s ease;
+    }
+    .btn-secondary:active { transform: scale(0.97); }
+    .btn-ghost {
+      background: transparent; color: var(--text2);
+      transition: color 1.8s ease;
+    }
+    .btn-danger {
+      background: #CC1111; color: #FAFAF8;
+    }
+
+    /* ——— INPUTS ——— */
+    .input-field {
+      background: var(--bg2); border: 1.5px solid var(--border);
+      border-radius: 14px; padding: 18px 20px;
+      font-family: 'Instrument Serif', serif; font-size: 20px;
+      color: var(--text); width: 100%; outline: none;
+      transition: var(--trans); resize: none;
+      -webkit-appearance: none;
+    }
+    .input-field::placeholder { color: var(--text2); opacity: 0.7; }
+    .input-field:focus { border-color: var(--accent); }
+
+    .input-small {
+      background: var(--bg2); border: 1.5px solid var(--border);
+      border-radius: 10px; padding: 12px 16px;
+      font-family: 'DM Mono', monospace; font-size: 13px;
+      color: var(--text); width: 100%; outline: none;
+      transition: var(--trans); -webkit-appearance: none;
+    }
+    .input-small:focus { border-color: var(--accent); }
+
+    /* ——— SPACERS ——— */
+    .flex1 { flex: 1; }
+    .mt8 { margin-top: 8px; }
+    .mt12 { margin-top: 12px; }
+    .mt16 { margin-top: 16px; }
+    .mt20 { margin-top: 20px; }
+    .mt28 { margin-top: 28px; }
+    .mt40 { margin-top: 40px; }
+    .gap8 { display: flex; flex-direction: column; gap: 8px; }
+    .gap12 { display: flex; flex-direction: column; gap: 12px; }
+    .gap16 { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ——— TOP BAR ——— */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-bottom: 20px;
+    }
+    .wordmark {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px; letter-spacing: 0.3em;
+      text-transform: uppercase; color: var(--text2);
+      transition: color 1.8s ease;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); transition: background 1.8s ease;
+    }
+
+    /* ——— PROGRESS BAR ——— */
+    .progress-bar {
+      height: 3px; background: var(--border);
+      border-radius: 2px; overflow: hidden;
+      transition: background 1.8s ease;
+    }
+    .progress-fill {
+      height: 100%; background: var(--accent);
+      border-radius: 2px; transition: width 0.5s ease, background 1.8s ease;
+    }
+
+    /* ——— URGENCY PULSE ——— */
+    @keyframes urgencyPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .pulsing { animation: urgencyPulse 1.5s ease-in-out infinite; }
+    .fast-pulse { animation: urgencyPulse 0.7s ease-in-out infinite; }
+
+    /* ——— DIVIDER ——— */
+    .divider { height: 1px; background: var(--border); transition: background 1.8s ease; }
+
+    /* ——— CHIP ——— */
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--accent-light); border: 1px solid var(--border);
+      border-radius: 100px; padding: 6px 14px;
+      font-size: 11px; color: var(--accent);
+      letter-spacing: 0.05em; transition: var(--trans);
+    }
+
+    /* ——— OVERRIDE CHIPS ——— */
+    .override-options { display: flex; flex-wrap: wrap; gap: 10px; }
+    .override-chip {
+      padding: 10px 16px; border-radius: 100px;
+      border: 1.5px solid var(--border);
+      background: transparent; color: var(--text2);
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      letter-spacing: 0.03em; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .override-chip.selected {
+      background: var(--text); color: var(--bg);
+      border-color: var(--text);
+    }
+
+    /* ——— ESCALATION BOX ——— */
+    .escalation-box {
+      background: var(--accent-light); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+      transition: var(--trans);
+    }
+    .escalation-text {
+      font-family: 'Instrument Serif', serif; font-size: 18px;
+      line-height: 1.5; color: var(--text); font-style: italic;
+      transition: color 1.8s ease;
+    }
+
+    /* ——— GHOST TEXT (dark states) ——— */
+    .ghost-anchor {
+      font-family: 'Instrument Serif', serif; font-size: 14px;
+      color: var(--text2); font-style: italic; line-height: 1.6;
+      transition: color 1.8s ease; opacity: 0;
+      transition: opacity 1s ease, color 1.8s ease;
+    }
+    [data-urgency="3"] .ghost-anchor,
+    [data-urgency="4"] .ghost-anchor,
+    [data-urgency="5"] .ghost-anchor { opacity: 1; }
+
+    /* ——— COMPLETION GLOW ——— */
+    @keyframes completionGlow {
+      0% { opacity: 0; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0; transform: scale(1.2); }
+    }
+    .glyph-burst {
+      width: 120px; height: 120px;
+      border-radius: 50%; background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto;
+      animation: completionGlow 3s ease forwards;
+    }
+    .glyph-inner {
+      font-size: 48px; line-height: 1;
+    }
+
+    /* ——— SCROLL AREA ——— */
+    .scroll-area { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+    .scroll-area::-webkit-scrollbar { display: none; }
+
+    /* ——— ONBOARDING SPECIFIC ——— */
+    .q-step { font-size: 11px; color: var(--text2); letter-spacing: 0.15em; text-transform: uppercase; }
+    .q-dots { display: flex; gap: 6px; align-items: center; }
+    .q-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.3s ease; }
+    .q-dot.done { background: var(--accent); }
+    .q-dot.current { background: var(--text); width: 18px; border-radius: 3px; }
+
+    /* ——— STREAK BADGE ——— */
+    .streak-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      color: var(--text2); transition: color 1.8s ease;
+    }
+
+    /* ——— REVIEW / DONE ITEMS ——— */
+    .done-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 18px;
+      transition: var(--trans);
+    }
+
+    /* ——— SWIPE HINT ——— */
+    .swipe-hint { text-align: center; font-size: 10px; color: var(--text2); letter-spacing: 0.1em; margin-top: 8px; }
+
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== SCREEN: ONBOARDING ===== -->
+  <div id="screen-onboarding" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <div class="q-dots" id="ob-dots"></div>
+    </div>
+
+    <div class="scroll-area">
+      <div id="ob-questions"></div>
+    </div>
+
+    <div class="mt16 gap8">
+      <button class="btn btn-primary" id="ob-next-btn">Continue →</button>
+      <button class="btn btn-ghost" id="ob-back-btn" style="display:none">← Back</button>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: COMMIT (night before) ===== -->
+  <div id="screen-commit" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <span class="streak-badge" id="streak-commit">— day streak</span>
+    </div>
+
+    <div class="flex1 scroll-area">
+      <div class="label">tonight's commitment</div>
+      <div class="mt8 big-text serif">What's the one thing<br>tomorrow needs?</div>
+
+      <div class="mt28">
+        <textarea class="input-field" id="commit-text" rows="3" placeholder="The one thing. Not a list."></textarea>
+      </div>
+
+      <div class="mt16 gap8">
+        <div class="label">complete by</div>
+        <input type="time" class="input-small" id="commit-time" value="17:00">
+      </div>
+
+      <div class="mt16 gap8">
+        <div class="label">witness (optional)</div>
+        <input type="text" class="input-small" id="commit-witness" placeholder="Their name — they'll know if you don't">
+      </div>
+    </div>
+
+    <div class="mt16">
+      <button class="btn btn-primary" id="commit-btn">Set commitment →</button>
+      <div class="swipe-hint mt8">This locks in. Tomorrow-you executes, doesn't negotiate.</div>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: MORNING ===== -->
+  <div id="screen-morning" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <div class="status-dot"></div>
+    </div>
+
+    <div class="flex1 gap16" style="justify-content: center;">
+      <div>
+        <div class="label">today's commitment</div>
+        <div class="mt8 commitment-display" id="morning-task"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="label">deadline</div>
+        <div class="mt8 timer-display" id="morning-deadline"></div>
+      </div>
+
+      <div class="ghost-anchor" id="morning-ghost"></div>
+    </div>
+
+    <div class="gap8">
+      <button class="btn btn-primary" id="morning-open-btn">I'm starting — Open ↗</button>
+      <div class="label" style="text-align:center">Timestamps when you log this.</div>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: ACTIVE (countdown running) ===== -->
+  <div id="screen-active" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <div class="status-dot" id="active-dot"></div>
+    </div>
+
+    <div class="flex1" style="display:flex; flex-direction:column; justify-content:space-between;">
+
+      <div>
+        <div class="label">in progress</div>
+        <div class="mt8 commitment-display" id="active-task"></div>
+      </div>
+
+      <div style="text-align:center">
+        <div class="label">time remaining</div>
+        <div class="mt8 timer-display" id="active-countdown" style="text-align:center"></div>
+        <div class="progress-bar mt12">
+          <div class="progress-fill" id="active-progress"></div>
+        </div>
+        <div class="mt8 label" id="active-subtext"></div>
+      </div>
+
+      <div>
+        <div class="escalation-box" id="active-escalation-box" style="display:none">
+          <div class="label" style="margin-bottom:8px">// override signal</div>
+          <div class="escalation-text" id="active-escalation-msg"></div>
+        </div>
+        <div class="ghost-anchor mt16" id="active-ghost"></div>
+      </div>
+
+    </div>
+
+    <div class="mt16 gap8">
+      <button class="btn btn-primary" id="done-btn">Mark Complete ✓</button>
+      <button class="btn btn-secondary" id="drift-btn">I'm drifting — wake me up</button>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: COMPLETE ===== -->
+  <div id="screen-complete" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <span class="chip">✓ Complete</span>
+    </div>
+
+    <div class="flex1" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px;">
+
+      <div class="glyph-burst">
+        <div class="glyph-inner">◈</div>
+      </div>
+
+      <div style="text-align:center">
+        <div class="big-text serif">Done.</div>
+        <div class="mt8 label" id="complete-time-label"></div>
+      </div>
+
+      <div class="divider" style="width:100%;"></div>
+
+      <div style="width:100%" class="gap12">
+        <div class="label">what actually happened</div>
+        <textarea class="input-field" id="complete-reflection" rows="2" placeholder="One line. What did you do?"></textarea>
+        <div class="label mt8">any confusion or blocker</div>
+        <input class="input-small" id="complete-blocker" placeholder="Optional — for future you">
+      </div>
+
+    </div>
+
+    <div class="mt16 gap8">
+      <button class="btn btn-primary" id="close-day-btn">Close the day →</button>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: DAY CLOSED ===== -->
+  <div id="screen-closed" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <span class="streak-badge" id="streak-closed">— day streak</span>
+    </div>
+
+    <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; gap:20px;">
+      <div>
+        <div class="label">today closed</div>
+        <div class="mt8 big-text serif" id="closed-msg">Good execution.</div>
+      </div>
+
+      <div class="done-card" id="closed-summary"></div>
+
+      <div class="divider"></div>
+
+      <div style="opacity:0.5">
+        <div class="label">tomorrow opens at</div>
+        <div class="mt8 mono" style="font-size:22px" id="tomorrow-time">10:00 PM</div>
+      </div>
+    </div>
+
+    <div class="mt16 gap8">
+      <button class="btn btn-secondary" id="commit-tomorrow-btn">Set tomorrow's commitment →</button>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: MISSED (no completion) ===== -->
+  <div id="screen-missed" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+      <div class="status-dot" style="background:#CC1111;"></div>
+    </div>
+
+    <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; gap:20px;">
+      <div>
+        <div class="label">day ended — not completed</div>
+        <div class="mt8 big-text serif" id="missed-text">This is what drift looks like.</div>
+      </div>
+
+      <div class="escalation-box">
+        <div class="escalation-text" id="missed-anchor"></div>
+      </div>
+
+      <div class="ghost-anchor mt8" id="missed-ghost" style="opacity:1;"></div>
+    </div>
+
+    <div class="gap8">
+      <button class="btn btn-primary" id="missed-commit-btn">Tomorrow, no excuses →</button>
+      <button class="btn btn-ghost" id="missed-partial-btn">Partial — I did some of it</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// =====================================================
+// OPERATOR — Core State Machine
+// =====================================================
+
+const S = {
+  profile: null,
+  today: null,
+  currentScreen: null,
+  urgency: 0,
+  timerInterval: null,
+};
+
+// LocalStorage keys
+const KEYS = {
+  profile: 'op_profile_v2',
+  today: 'op_today_v2',
+  history: 'op_history_v2',
+};
+
+// Load state
+function load() {
+  try { S.profile = JSON.parse(localStorage.getItem(KEYS.profile)); } catch(e) { S.profile = null; }
+  try { S.today = JSON.parse(localStorage.getItem(KEYS.today)); } catch(e) { S.today = null; }
+}
+
+function save(key, data) {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(KEYS.history)) || []; } catch(e) { return []; }
+}
+
+function getStreak() {
+  const h = getHistory();
+  let streak = 0;
+  const today = new Date().toDateString();
+  const sorted = h.filter(d => d.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
+  for (let i = 0; i < sorted.length; i++) {
+    const d = new Date(sorted[i].date);
+    const expected = new Date();
+    expected.setDate(expected.getDate() - i);
+    if (d.toDateString() === expected.toDateString()) streak++;
+    else break;
+  }
+  return streak;
+}
+
+// =====================================================
+// SCREEN ROUTING
+// =====================================================
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  S.currentScreen = id;
+  if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
+}
+
+function router() {
+  load();
+
+  if (!S.profile) {
+    initOnboarding();
+    showScreen('onboarding');
+    return;
+  }
+
+  const now = new Date();
+  const todayStr = now.toDateString();
+
+  // If today's entry doesn't exist or is from yesterday
+  if (!S.today || S.today.date !== todayStr) {
+    // Check if yesterday was missed
+    if (S.today && S.today.date !== todayStr && !S.today.completed) {
+      // Mark as missed in history
+      addHistory({ date: S.today.date, task: S.today.task, completed: false });
+    }
+    // Clear today if old
+    if (S.today && S.today.date !== todayStr) {
+      S.today = null;
+      save(KEYS.today, null);
+    }
+  }
+
+  if (!S.today) {
+    showScreen('commit');
+    refreshCommitScreen();
+    return;
+  }
+
+  if (S.today.missed) {
+    showScreen('missed');
+    refreshMissedScreen();
+    return;
+  }
+
+  if (S.today.completed) {
+    if (S.today.dayClosed) {
+      showScreen('closed');
+      refreshClosedScreen();
+    } else {
+      showScreen('complete');
+      refreshCompleteScreen();
+    }
+    return;
+  }
+
+  if (!S.today.started) {
+    showScreen('morning');
+    refreshMorningScreen();
+    return;
+  }
+
+  // Active — check if overdue
+  const deadline = new Date(S.today.deadlineTime);
+  if (now > deadline && !S.today.completed) {
+    // Check if the whole day has truly passed (after midnight)
+    if (now.toDateString() === todayStr) {
+      showScreen('active');
+      refreshActiveScreen();
+    } else {
+      S.today.missed = true;
+      save(KEYS.today, S.today);
+      showScreen('missed');
+      refreshMissedScreen();
+    }
+    return;
+  }
+
+  showScreen('active');
+  refreshActiveScreen();
+}
+
+function addHistory(entry) {
+  const h = getHistory();
+  h.unshift(entry);
+  save(KEYS.history, h.slice(0, 90)); // keep 90 days
+}
+
+// =====================================================
+// URGENCY ENGINE
+// =====================================================
+
+function calcUrgency(msRemaining, totalMs) {
+  if (!S.today || !S.today.started) return 0;
+  if (msRemaining <= 0) return 5;
+  const pct = msRemaining / totalMs;
+  if (pct > 0.75) return 0;
+  if (pct > 0.5) return 1;
+  if (pct > 0.25) return 2;
+  if (msRemaining > 30 * 60 * 1000) return 3;
+  if (msRemaining > 0) return 4;
+  return 5;
+}
+
+function setUrgency(level) {
+  if (S.urgency === level) return;
+  S.urgency = level;
+  document.body.setAttribute('data-urgency', level);
+  // Update theme-color meta
+  const colors = ['#FAFAF8','#FFF8EE','#FFE8D0','#FF4420','#8B0000','#080808'];
+  document.getElementById('tc').setAttribute('content', colors[level] || '#FAFAF8');
+}
+
+// =====================================================
+// PERSONALIZED ESCALATION MESSAGES
+// =====================================================
+
+function getEscalationMsg(urgency) {
+  if (!S.profile) return "Clock's running.";
+  const p = S.profile;
+  const msgs = {
+    1: [
+      `You set this last night. That version of you was right.`,
+      `Halfway there. The boring middle is exactly where it went wrong before.`,
+      p.stakes ? `Think about ${p.stakes}. This is for them.` : `Clock at 50%. This is the moment you usually find a reason to defer.`,
+    ],
+    2: [
+      p.drift ? `This is how "${p.drift}" started.` : `Recognize this feeling? You've been here before.`,
+      `The window is closing. Not slowly anymore.`,
+      p.stakes ? `${p.stakes} — that's what's on the line. Not points. Not a streak.` : `Time is running. This is real.`,
+    ],
+    3: [
+      p.drift ? `"${p.drift}" — one word. That's what today becomes if you don't move now.` : `One hour left. Move.`,
+      `This is the exact moment you've let slip before. Not this time.`,
+      p.stakes ? `${p.stakes} is watching in your head. What do you tell them?` : `This is not the version of you that quits.`,
+    ],
+    4: [
+      p.drift ? `You said you'd never repeat "${p.drift}". Today decides.` : `Last chance. No softening.`,
+      p.forward ? `Five years from now — "${p.forward}" — this moment matters.` : `This is where it counts. Right now.`,
+      `The glyph is full. The story you tell tomorrow starts in the next ten minutes.`,
+    ],
+    5: [
+      p.drift ? `"${p.drift}" — that's in the past. Today doesn't have to be.` : `The day ended. Tomorrow is blank.`,
+      p.forward ? `The version of you who reaches "${p.forward}" didn't miss many days. Just most.` : `Not finished. Not yet.`,
+      `This isn't judgement. This is just what the data says. You know what to do tomorrow.`,
+    ],
+  };
+
+  const arr = msgs[urgency] || [`Keep going.`];
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function getGhostText() {
+  if (!S.profile) return '';
+  const p = S.profile;
+  return p.forward || p.stakes || p.drift || '';
+}
+
+// =====================================================
+// ONBOARDING
+// =====================================================
+
+const OB_QUESTIONS = [
+  {
+    key: 'drift',
+    question: 'What's the thing you're most trying to not repeat?',
+    sub: 'Be honest with yourself here.',
+    type: 'textarea',
+    placeholder: 'The pattern, the failure, the drift...',
+  },
+  {
+    key: 'stakes',
+    question: 'Who are you doing this for, ultimately?',
+    sub: 'Could be yourself. Could be someone specific.',
+    type: 'text',
+    placeholder: 'A name, a reason, or both...',
+  },
+  {
+    key: 'activeWindow',
+    question: 'What time of day do you actually come alive?',
+    sub: 'We'll set your active window around this.',
+    type: 'select',
+    options: ['Early morning (5–9am)', 'Late morning (9am–12pm)', 'Afternoon (12–5pm)', 'Evening (5–10pm)', 'Night (10pm+)'],
+  },
+  {
+    key: 'override',
+    question: 'When you stall, what pulls you back?',
+    sub: 'Pick the one that actually works.',
+    type: 'chips',
+    options: ['Family / real stakes', 'Time running out', 'Someone watching', 'Fear of repeating the past', 'Imagining future me'],
+  },
+  {
+    key: 'forward',
+    question: 'In 5 years — what does the version of you look like that made it?',
+    sub: 'One sentence. Don't be modest.',
+    type: 'text',
+    placeholder: 'That version of me is...',
+  },
+];
+
+let obStep = 0;
+let obAnswers = {};
+
+function initOnboarding() {
+  obStep = 0;
+  obAnswers = {};
+  renderObQuestion();
+}
+
+function renderObDots() {
+  const container = document.getElementById('ob-dots');
+  container.innerHTML = '';
+  OB_QUESTIONS.forEach((q, i) => {
+    const d = document.createElement('div');
+    d.className = 'q-dot' + (i < obStep ? ' done' : '') + (i === obStep ? ' current' : '');
+    container.appendChild(d);
+  });
+}
+
+function renderObQuestion() {
+  renderObDots();
+  const q = OB_QUESTIONS[obStep];
+  const container = document.getElementById('ob-questions');
+  const backBtn = document.getElementById('ob-back-btn');
+  backBtn.style.display = obStep > 0 ? 'flex' : 'none';
+
+  let inputHtml = '';
+  if (q.type === 'textarea') {
+    inputHtml = `<textarea class="input-field" id="ob-input" rows="3" placeholder="${q.placeholder}">${obAnswers[q.key] || ''}</textarea>`;
+  } else if (q.type === 'text') {
+    inputHtml = `<input type="text" class="input-field" id="ob-input" placeholder="${q.placeholder}" value="${obAnswers[q.key] || ''}" style="font-size:18px;padding:16px 18px;">`;
+  } else if (q.type === 'select') {
+    inputHtml = `<div class="override-options" id="ob-chips">
+      ${q.options.map((o, i) => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
+    </div>`;
+  } else if (q.type === 'chips') {
+    inputHtml = `<div class="override-options" id="ob-chips">
+      ${q.options.map(o => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
+    </div>`;
+  }
+
+  container.innerHTML = `
+    <div class="label q-step">${obStep + 1} / ${OB_QUESTIONS.length}</div>
+    <div class="mt12 big-text serif" style="font-size:clamp(22px,5vw,28px)">${q.question}</div>
+    <div class="mt8 label">${q.sub}</div>
+    <div class="mt20">${inputHtml}</div>
+  `;
+
+  // Autofocus text inputs
+  setTimeout(() => {
+    const inp = document.getElementById('ob-input');
+    if (inp) inp.focus();
+  }, 300);
+
+  const nextBtn = document.getElementById('ob-next-btn');
+  nextBtn.textContent = obStep < OB_QUESTIONS.length - 1 ? 'Continue →' : 'Build my profile →';
+}
+
+function selectChip(el, key) {
+  const chips = document.querySelectorAll(`#ob-chips .override-chip`);
+  chips.forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  obAnswers[key] = el.dataset.val;
+}
+
+function obNext() {
+  const q = OB_QUESTIONS[obStep];
+  const inp = document.getElementById('ob-input');
+  if (inp) obAnswers[q.key] = inp.value.trim();
+
+  if ((q.type === 'text' || q.type === 'textarea') && !obAnswers[q.key]) {
+    inp.style.borderColor = 'var(--accent)';
+    inp.placeholder = 'This one matters — take a moment.';
+    inp.focus();
+    return;
+  }
+  if ((q.type === 'select' || q.type === 'chips') && !obAnswers[q.key]) {
+    document.querySelectorAll('#ob-chips .override-chip')[0]?.classList.add('selected');
+    obAnswers[q.key] = OB_QUESTIONS[obStep].options[0];
+  }
+
+  obStep++;
+  if (obStep >= OB_QUESTIONS.length) {
+    S.profile = {
+      drift: obAnswers.drift,
+      stakes: obAnswers.stakes,
+      activeWindow: obAnswers.activeWindow,
+      override: obAnswers.override,
+      forward: obAnswers.forward,
+      createdAt: new Date().toISOString(),
+    };
+    save(KEYS.profile, S.profile);
+    router();
+  } else {
+    renderObQuestion();
+  }
+}
+
+function obBack() {
+  if (obStep > 0) {
+    obStep--;
+    renderObQuestion();
+  }
+}
+
+// =====================================================
+// COMMIT SCREEN
+// =====================================================
+
+function refreshCommitScreen() {
+  const streak = getStreak();
+  document.getElementById('streak-commit').textContent = streak > 0 ? `${streak} day streak` : '—';
+}
+
+function submitCommit() {
+  const task = document.getElementById('commit-text').value.trim();
+  const timeVal = document.getElementById('commit-time').value || '17:00';
+  const witness = document.getElementById('commit-witness').value.trim();
+
+  if (!task) {
+    document.getElementById('commit-text').focus();
+    document.getElementById('commit-text').placeholder = 'Write the one thing. Be specific.';
+    return;
+  }
+
+  const today = new Date();
+  const [h, m] = timeVal.split(':').map(Number);
+  const deadline = new Date(today);
+  deadline.setHours(h, m, 0, 0);
+
+  // If deadline has already passed for today, set for tomorrow
+  if (deadline < today) deadline.setDate(deadline.getDate() + 1);
+
+  S.today = {
+    date: today.toDateString(),
+    task,
+    deadlineTime: deadline.toISOString(),
+    startTime: null,
+    started: false,
+    completed: false,
+    dayClosed: false,
+    missed: false,
+    witness,
+    reflection: '',
+    blocker: '',
+  };
+
+  save(KEYS.today, S.today);
+  // Clear inputs
+  document.getElementById('commit-text').value = '';
+  document.getElementById('commit-witness').value = '';
+  router();
+}
+
+// =====================================================
+// MORNING SCREEN
+// =====================================================
+
+function refreshMorningScreen() {
+  if (!S.today) return;
+  document.getElementById('morning-task').textContent = `"${S.today.task}"`;
+  const dl = new Date(S.today.deadlineTime);
+  document.getElementById('morning-deadline').textContent = dl.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const ghost = getGhostText();
+  const ghostEl = document.getElementById('morning-ghost');
+  if (ghost) ghostEl.textContent = `"${ghost}"`;
+  setUrgency(0);
+}
+
+function openCommitment() {
+  if (!S.today) return;
+  S.today.started = true;
+  S.today.startTime = new Date().toISOString();
+  save(KEYS.today, S.today);
+  router();
+}
+
+// =====================================================
+// ACTIVE SCREEN — COUNTDOWN
+// =====================================================
+
+let lastEscalationMsg = '';
+
+function refreshActiveScreen() {
+  if (!S.today) return;
+  document.getElementById('active-task').textContent = `"${S.today.task}"`;
+  const ghostEl = document.getElementById('active-ghost');
+  const ghost = getGhostText();
+  if (ghost) ghostEl.textContent = `"${ghost}"`;
+
+  startCountdown();
+}
+
+function startCountdown() {
+  if (S.timerInterval) clearInterval(S.timerInterval);
+
+  function tick() {
+    if (!S.today) return;
+    const now = new Date();
+    const deadline = new Date(S.today.deadlineTime);
+    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
+    const totalMs = deadline - start;
+    const remaining = deadline - now;
+
+    const urgency = calcUrgency(remaining, totalMs);
+    setUrgency(urgency);
+
+    const countEl = document.getElementById('active-countdown');
+    const progressEl = document.getElementById('active-progress');
+    const subtextEl = document.getElementById('active-subtext');
+    const escBox = document.getElementById('active-escalation-box');
+    const escMsg = document.getElementById('active-escalation-msg');
+    const dot = document.getElementById('active-dot');
+
+    if (remaining <= 0) {
+      countEl.textContent = 'TIME';
+      if (dot) dot.classList.add('fast-pulse');
+    } else {
+      const h = Math.floor(remaining / 3600000);
+      const min = Math.floor((remaining % 3600000) / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      if (h > 0) {
+        countEl.textContent = `${h}h ${String(min).padStart(2,'0')}m`;
+      } else {
+        countEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+      }
+    }
+
+    // Progress bar
+    const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
+    if (progressEl) progressEl.style.width = pct + '%';
+
+    // Subtext
+    const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
+    if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
+
+    // Dot animation
+    if (dot) {
+      dot.classList.remove('pulsing', 'fast-pulse');
+      if (urgency >= 4) dot.classList.add('fast-pulse');
+      else if (urgency >= 2) dot.classList.add('pulsing');
+    }
+
+    // Escalation message (show from urgency 1+)
+    if (urgency >= 1) {
+      if (!lastEscalationMsg || urgency > S.urgency - 1) {
+        lastEscalationMsg = getEscalationMsg(urgency);
+      }
+      if (escBox) { escBox.style.display = 'block'; }
+      if (escMsg) escMsg.textContent = lastEscalationMsg;
+    } else {
+      if (escBox) escBox.style.display = 'none';
+    }
+  }
+
+  tick();
+  S.timerInterval = setInterval(tick, 1000);
+}
+
+function markDone() {
+  if (!S.today) return;
+  S.today.completed = true;
+  S.today.completedTime = new Date().toISOString();
+  save(KEYS.today, S.today);
+  if (S.timerInterval) clearInterval(S.timerInterval);
+  setUrgency(0);
+  router();
+}
+
+function triggerWakeup() {
+  lastEscalationMsg = getEscalationMsg(Math.max(1, S.urgency));
+  const escMsg = document.getElementById('active-escalation-msg');
+  const escBox = document.getElementById('active-escalation-box');
+  if (escMsg) escMsg.textContent = lastEscalationMsg;
+  if (escBox) { escBox.style.display = 'block'; escBox.style.animation = 'fadeIn 0.4s ease'; }
+}
+
+// =====================================================
+// COMPLETE SCREEN
+// =====================================================
+
+function refreshCompleteScreen() {
+  if (!S.today || !S.today.completedTime) return;
+  const ct = new Date(S.today.completedTime);
+  const dl = new Date(S.today.deadlineTime);
+  const early = dl - ct;
+  let label = '';
+  if (early > 0) {
+    const h = Math.floor(early / 3600000);
+    const m = Math.floor((early % 3600000) / 60000);
+    label = h > 0 ? `${h}h ${m}m before deadline` : `${m} minutes before deadline`;
+  } else {
+    label = 'After deadline — still counts.';
+  }
+  document.getElementById('complete-time-label').textContent = label;
+}
+
+function closeDay() {
+  const ref = document.getElementById('complete-reflection').value.trim();
+  const block = document.getElementById('complete-blocker').value.trim();
+  if (!S.today) return;
+  S.today.reflection = ref;
+  S.today.blocker = block;
+  S.today.dayClosed = true;
+  save(KEYS.today, S.today);
+  addHistory({ date: S.today.date, task: S.today.task, completed: true, reflection: ref });
+  router();
+}
+
+// =====================================================
+// CLOSED SCREEN
+// =====================================================
+
+function refreshClosedScreen() {
+  if (!S.today) return;
+  const streak = getStreak();
+  document.getElementById('streak-closed').textContent = `${streak} day streak`;
+  const hour = new Date().getHours();
+  const msgs = ['Sharp execution.', 'That\'s how it\'s done.', 'Good work.', 'Locked in.', 'Consistent.'];
+  document.getElementById('closed-msg').textContent = msgs[streak % msgs.length];
+  document.getElementById('closed-summary').innerHTML = `
+    <div class="label">what you did</div>
+    <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${S.today.task}"</div>
+    ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${S.today.reflection}</div>` : ''}
+  `;
+  // 10pm for next commit
+  document.getElementById('tomorrow-time').textContent = '10:00 PM';
+}
+
+// =====================================================
+// MISSED SCREEN
+// =====================================================
+
+function refreshMissedScreen() {
+  setUrgency(5);
+  const ghost = getGhostText();
+  if (ghost) {
+    document.getElementById('missed-ghost').textContent = `"${ghost}"`;
+  }
+  document.getElementById('missed-anchor').textContent = getEscalationMsg(5);
+  const task = S.today ? S.today.task : '';
+  if (task) {
+    document.getElementById('missed-text').textContent = `"${task}" — not today.`;
+  }
+}
+
+function missedCommit() {
+  if (S.today) {
+    addHistory({ date: S.today.date, task: S.today.task, completed: false });
+    S.today = null;
+    save(KEYS.today, null);
+  }
+  setUrgency(0);
+  showScreen('commit');
+  refreshCommitScreen();
+}
+
+function missedPartial() {
+  if (!S.today) return;
+  S.today.completed = true;
+  S.today.completedTime = new Date().toISOString();
+  save(KEYS.today, S.today);
+  setUrgency(0);
+  router();
+}
+
+// =====================================================
+// EVENT BINDINGS
+// =====================================================
+
+document.getElementById('ob-next-btn').addEventListener('click', obNext);
+document.getElementById('ob-back-btn').addEventListener('click', obBack);
+document.getElementById('commit-btn').addEventListener('click', submitCommit);
+document.getElementById('morning-open-btn').addEventListener('click', openCommitment);
+document.getElementById('done-btn').addEventListener('click', markDone);
+document.getElementById('drift-btn').addEventListener('click', triggerWakeup);
+document.getElementById('close-day-btn').addEventListener('click', closeDay);
+document.getElementById('commit-tomorrow-btn').addEventListener('click', () => { showScreen('commit'); refreshCommitScreen(); });
+document.getElementById('missed-commit-btn').addEventListener('click', missedCommit);
+document.getElementById('missed-partial-btn').addEventListener('click', missedPartial);
+
+// Allow Enter key in commit field
+document.getElementById('commit-text').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitCommit(); }
+});
+
+// =====================================================
+// SERVICE WORKER
+// =====================================================
+
+if (typeof navigator.serviceWorker !== 'undefined') {
+  navigator.serviceWorker.register('sw.js')
+}
+
+
+// =====================================================
+// BOOT
+// =====================================================
+
+router();
+</script>
+</body>
+</html>
