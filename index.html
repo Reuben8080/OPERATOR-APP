@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="OPERATOR">
   <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link class="apple-touch-icon" href="icons/icon-192.png">
   <title>OPERATOR</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
@@ -381,7 +381,6 @@
         <div class="mt8 label" id="active-subtext"></div>
       </div>
       <div>
-        <!-- Clean layout: no tacky structural headers inside box -->
         <div class="escalation-box" id="active-escalation-box">
           <div class="escalation-text" id="active-escalation-msg"></div>
         </div>
@@ -633,7 +632,7 @@ function getGhostText() {
 }
 
 // =====================================================
-// STRIPPED INTERVENTION CORES (No Tacky Prefixes)
+// STRIPPED INTERVENTION CORES
 // =====================================================
 let lastUrgencyLevel = -1;
 let lastEscalationMsg = '';
@@ -781,8 +780,11 @@ function startCountdown() {
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
-    // CONTROL LOOP: Hidden by default unless manual circuit breaker is active
-    if (!isDriftingActive) {
+    // EXPLICIT LAYOUT LOCK: Re-enforces state on every countdown movement to prevent early snap-backs
+    if (isDriftingActive) {
+      if (escBox) escBox.style.display = 'block';
+      if (escMsg && lastEscalationMsg) escMsg.textContent = lastEscalationMsg;
+    } else {
       if (escBox) escBox.style.display = 'none';
     }
   }
@@ -817,7 +819,7 @@ function triggerWakeup() {
 
   if (S.driftTimeout) clearTimeout(S.driftTimeout);
   
-  // Stays up for exactly 30 seconds, unaffected by background tick() calls
+  // Hard window: box cannot be cleared out by ticking loops until full duration complete
   S.driftTimeout = setTimeout(() => {
     isDriftingActive = false;
     lastEscalationMsg = ''; 
@@ -825,9 +827,8 @@ function triggerWakeup() {
     if (!S.today) return;
     const now = new Date();
     const deadline = new Date(S.today.deadlineTime);
-    if (deadline - now <= 0) return; // Terminal logic will pick it up cleanly
+    if (deadline - now <= 0) return; 
     
-    // Auto-hide when the intentional window completes
     if (escBox) escBox.style.display = 'none';
   }, 30000); 
 }
