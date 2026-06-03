@@ -79,8 +79,6 @@
 
     .label {
       font-size: 10px; letter-spacing: 0.2em;
-      text-transform: uppercase; color: var(--text2);
-      font-weight: 500; transition: color 1.8s ease;
     }
     .big-text {
       font-family: 'Instrument Serif', serif;
@@ -110,8 +108,7 @@
     .btn {
       display: flex; align-items: center; justify-content: center;
       padding: 18px 28px; border-radius: 14px;
-      font-family: 'DM Mono', monospace; font-size: 13px;
-      font-weight: 500; letter-spacing: 0.05em;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; font-size: 15px; font-weight: 500; letter-spacing: -0.01em;
       cursor: pointer; border: none; outline: none;
       transition: all 0.2s ease; -webkit-appearance: none;
       width: 100%;
@@ -189,8 +186,6 @@
     .wordmark {
       font-family: 'DM Mono', monospace;
       font-size: 11px; letter-spacing: 0.3em;
-      text-transform: uppercase; color: var(--text2);
-      transition: color 1.8s ease;
     }
     .status-dot {
       width: 7px; height: 7px; border-radius: 50%;
@@ -293,8 +288,6 @@
     .scroll-area::-webkit-scrollbar { display: none; }
 
     /* ——— ONBOARDING SPECIFIC ——— */
-    .q-step { font-size: 11px; color: var(--text2); letter-spacing: 0.15em; text-transform: uppercase; }
-    .q-dots { display: flex; gap: 6px; align-items: center; }
     .q-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.3s ease; }
     .q-dot.done { background: var(--accent); }
     .q-dot.current { background: var(--text); width: 18px; border-radius: 3px; }
@@ -469,8 +462,8 @@
     </div>
 
     <div class="mt16 gap8">
-      <button class="btn btn-primary" id="done-btn">Mark Complete ✓</button>
-      <button class="btn btn-secondary" id="drift-btn">I'm drifting — wake me up</button>
+      <button class="btn btn-primary" id="done-btn">Mark Complete &nbsp;◆</button>
+      <button class="btn btn-secondary" id="drift-btn">Pause. Reset. Return.</button>
     </div>
   </div>
 
@@ -556,7 +549,7 @@
 
     <div class="gap8">
       <button class="btn btn-primary" id="missed-commit-btn">Tomorrow, no excuses →</button>
-      <button class="btn btn-ghost" id="missed-partial-btn">Partial — I did some of it</button>
+      <button class="btn btn-secondary" id="missed-partial-btn">Partial — I did some of it</button>
     </div>
   </div>
 
@@ -649,7 +642,7 @@ function resetDriftButtonState() {
     driftBtn._graceMode = false;
     driftBtn.removeAttribute('disabled');
     driftBtn.style.opacity = '';
-    driftBtn.textContent = "I'm drifting — wake me up";
+    driftBtn.textContent = "Pause. Reset. Return.";
   }
 }
 
@@ -1529,6 +1522,7 @@ function missedPartial() {
   if (!S.today) return;
   S.today.completed = true;
   S.today.partial = true;
+  S.today.missed = false;
   S.today.completedTime = new Date().toISOString();
   save(KEYS.today, S.today);
   // Update the history entry that router already logged as missed for this task
