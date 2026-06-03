@@ -70,6 +70,11 @@
     .screen { display: none; height: 100%; flex-direction: column; animation: fadeIn 0.5s ease; }
     .screen.active { display: flex; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    
+    @keyframes fadeOut { 
+      from { opacity: 1; transform: translateY(0); } 
+      to { opacity: 0; transform: translateY(8px); } 
+    }
 
     /* ——— TYPOGRAPHY ——— */
     .serif { font-family: 'Instrument Serif', serif; }
@@ -262,7 +267,7 @@
       border-radius: 50%; background: var(--accent);
       display: flex; align-items: center; justify-content: center;
       margin: 0 auto;
-      animation: completionGlow 3s ease forwards;
+      animation: completionGlow 3s forwards cubic-bezier(0.4, 0, 0.2, 1);
     }
     .glyph-inner {
       font-size: 48px; line-height: 1;
@@ -295,6 +300,33 @@
 
     /* ——— SWIPE HINT ——— */
     .swipe-hint { text-align: center; font-size: 10px; color: var(--text2); letter-spacing: 0.1em; margin-top: 8px; }
+
+    /* ——— BLACKOUT SCREEN ——— */
+    #screen-blackout {
+      background: #000 !important;
+      color: #FFF !important;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      z-index: 9999;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      padding: 40px;
+    }
+    
+    .traumatic-text {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(32px, 8vw, 48px);
+      line-height: 1.2;
+      opacity: 0;
+      color: #FFF;
+      animation: slowFadeIn 3s ease forwards;
+    }
+
+    @keyframes slowFadeIn {
+      0% { opacity: 0; transform: scale(0.95); }
+      100% { opacity: 1; transform: scale(1); }
+    }
 
   </style>
 </head>
@@ -465,7 +497,7 @@
 
       <div style="opacity:0.5">
         <div class="label">tomorrow opens at</div>
-        <div class="mt8 mono" style="font-size:22px" id="tomorrow-time">10:00 PM</div>
+        <div class="mt8 mono" style="font-size:22px" id="tomorrow-time"></div>
       </div>
     </div>
 
@@ -499,6 +531,12 @@
     </div>
   </div>
 
+  <div id="screen-blackout" class="screen">
+    <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; align-items:center;">
+      <div class="traumatic-text" id="blackout-msg"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -512,6 +550,7 @@ const S = {
   currentScreen: null,
   urgency: 0,
   timerInterval: null,
+  blackoutTriggered: false
 };
 
 // LocalStorage keys
@@ -537,15 +576,30 @@ function getHistory() {
 
 function getStreak() {
   const h = getHistory();
+  if (h.length === 0) return 0;
+  
   let streak = 0;
   const today = new Date().toDateString();
-  const sorted = h.filter(d => d.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
-  for (let i = 0; i < sorted.length; i++) {
-    const d = new Date(sorted[i].date);
-    const expected = new Date();
-    expected.setDate(expected.getDate() - i);
-    if (d.toDateString() === expected.toDateString()) streak++;
-    else break;
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toDateString();
+  
+  // Find out where to start counting from
+  let currentExpected = new Date(h[0].date);
+  
+  // If the most recent history item isn't today or yesterday, the streak is broken
+  if (currentExpected.toDateString() !== today && currentExpected.toDateString() !== yesterdayStr) {
+    return 0;
+  }
+  
+  for (let i = 0; i < h.length; i++) {
+    const d = new Date(h[i].date);
+    if (d.toDateString() === currentExpected.toDateString()) {
+      if (h[i].completed) streak++;
+      currentExpected.setDate(currentExpected.getDate() - 1); // roll back one day
+    } else {
+      break;
+    }
   }
   return streak;
 }
@@ -558,7 +612,7 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
   S.currentScreen = id;
-  if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
+  if (S.timerInterval && id !== 'active') { clearInterval(S.timerInterval); S.timerInterval = null; }
 }
 
 function router() {
@@ -575,13 +629,19 @@ function router() {
 
   // If today's entry doesn't exist or is from yesterday
   if (!S.today || S.today.date !== todayStr) {
-    // Check if yesterday was missed
-    if (S.today && S.today.date !== todayStr && !S.today.completed) {
-      // Mark as missed in history
-      addHistory({ date: S.today.date, task: S.today.task, completed: false });
-    }
-    // Clear today if old
     if (S.today && S.today.date !== todayStr) {
+      if (!S.today.completed) {
+        // Mark as missed in history
+        addHistory({ date: S.today.date, task: S.today.task, completed: false });
+      } else if (!S.today.dayClosed) {
+        // Safeguard: Auto-close completed days that crossed midnight so progress isn't lost
+        addHistory({ 
+          date: S.today.date, 
+          task: S.today.task, 
+          completed: true, 
+          reflection: S.today.reflection || "Auto-closed past midnight." 
+        });
+      }
       S.today = null;
       save(KEYS.today, null);
     }
@@ -619,7 +679,6 @@ function router() {
   // Active — check if overdue
   const deadline = new Date(S.today.deadlineTime);
   if (now > deadline && !S.today.completed) {
-    // Check if the whole day has truly passed (after midnight)
     if (now.toDateString() === todayStr) {
       showScreen('active');
       refreshActiveScreen();
@@ -890,6 +949,7 @@ function submitCommit() {
   S.today = {
     date: today.toDateString(),
     task,
+    creationTime: today.toISOString(),
     deadlineTime: deadline.toISOString(),
     startTime: null,
     started: false,
@@ -936,6 +996,8 @@ function openCommitment() {
 // =====================================================
 
 let lastEscalationMsg = '';
+let wakeupTimeout = null;
+let isWakeupActive = false;
 
 function refreshActiveScreen() {
   if (!S.today) return;
@@ -947,6 +1009,32 @@ function refreshActiveScreen() {
   startCountdown();
 }
 
+function triggerBlackout() {
+  document.body.style.transition = 'background 2s ease';
+  document.body.style.background = '#000';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  
+  const blackoutScreen = document.getElementById('screen-blackout');
+  blackoutScreen.classList.add('active');
+  
+  // Use personalized trauma text if available
+  const textElement = document.getElementById('blackout-msg');
+  if (S.profile && S.profile.drift) {
+    textElement.textContent = `You let "${S.profile.drift}" win.`;
+  } else {
+    textElement.textContent = "Time expired. You drifted.";
+  }
+  
+  // 10 second reset
+  setTimeout(() => {
+    S.today.missed = true;
+    save(KEYS.today, S.today);
+    S.blackoutTriggered = false;
+    document.body.style.transition = 'var(--trans)';
+    router();
+  }, 10000);
+}
+
 function startCountdown() {
   if (S.timerInterval) clearInterval(S.timerInterval);
 
@@ -954,7 +1042,10 @@ function startCountdown() {
     if (!S.today) return;
     const now = new Date();
     const deadline = new Date(S.today.deadlineTime);
-    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
+    
+    // Anchor total duration off the commitment's creation time so urgency doesn't reset when started late
+    const start = S.today.creationTime ? new Date(S.today.creationTime) : new Date(S.today.date);
+    
     const totalMs = deadline - start;
     const remaining = deadline - now;
 
@@ -971,6 +1062,14 @@ function startCountdown() {
     if (remaining <= 0) {
       countEl.textContent = 'TIME';
       if (dot) dot.classList.add('fast-pulse');
+      
+      // Dramatic ending sequence
+      if (!S.blackoutTriggered && !S.today.completed) {
+        S.blackoutTriggered = true;
+        clearInterval(S.timerInterval);
+        triggerBlackout();
+        return;
+      }
     } else {
       const h = Math.floor(remaining / 3600000);
       const min = Math.floor((remaining % 3600000) / 60000);
@@ -997,15 +1096,23 @@ function startCountdown() {
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
-    // Escalation message (show from urgency 1+)
+    // Escalation message logic
     if (urgency >= 1) {
       if (!lastEscalationMsg || urgency > S.urgency - 1) {
         lastEscalationMsg = getEscalationMsg(urgency);
       }
-      if (escBox) { escBox.style.display = 'block'; }
+      if (escBox) { 
+        escBox.style.display = 'block'; 
+        // Clear fade-out animations if real urgency kicks in
+        if (!isWakeupActive) {
+          escBox.style.animation = 'none';
+          escBox.style.opacity = '1';
+        }
+      }
       if (escMsg) escMsg.textContent = lastEscalationMsg;
     } else {
-      if (escBox) escBox.style.display = 'none';
+      // Only hide the box if the user hasn't triggered a manual drifting alert
+      if (escBox && !isWakeupActive) escBox.style.display = 'none';
     }
   }
 
@@ -1027,8 +1134,33 @@ function triggerWakeup() {
   lastEscalationMsg = getEscalationMsg(Math.max(1, S.urgency));
   const escMsg = document.getElementById('active-escalation-msg');
   const escBox = document.getElementById('active-escalation-box');
+  
   if (escMsg) escMsg.textContent = lastEscalationMsg;
-  if (escBox) { escBox.style.display = 'block'; escBox.style.animation = 'fadeIn 0.4s ease'; }
+  if (escBox) { 
+    escBox.style.display = 'block'; 
+    escBox.style.opacity = '1';
+    escBox.style.animation = 'fadeIn 0.4s ease forwards'; 
+  }
+
+  // Tell the tick() function to leave the box alone
+  isWakeupActive = true;
+  clearTimeout(wakeupTimeout);
+  
+  // Keep on screen for 14 seconds, then trigger a 1-second fade out
+  wakeupTimeout = setTimeout(() => {
+    if (escBox && S.urgency < 1) {
+      escBox.style.animation = 'fadeOut 1s ease forwards';
+      
+      // Wait for animation to finish before hiding it completely
+      setTimeout(() => {
+        isWakeupActive = false;
+        escBox.style.display = 'none';
+      }, 1000);
+    } else {
+      // If time is low enough that urgency is 1+, let tick() handle it natively
+      isWakeupActive = false; 
+    }
+  }, 14000);
 }
 
 // =====================================================
@@ -1071,7 +1203,6 @@ function refreshClosedScreen() {
   if (!S.today) return;
   const streak = getStreak();
   document.getElementById('streak-closed').textContent = `${streak} day streak`;
-  const hour = new Date().getHours();
   const msgs = ['Sharp execution.', 'That\'s how it\'s done.', 'Good work.', 'Locked in.', 'Consistent.'];
   document.getElementById('closed-msg').textContent = msgs[streak % msgs.length];
   document.getElementById('closed-summary').innerHTML = `
@@ -1079,8 +1210,9 @@ function refreshClosedScreen() {
     <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${S.today.task}"</div>
     ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${S.today.reflection}</div>` : ''}
   `;
-  // 10pm for next commit
-  document.getElementById('tomorrow-time').textContent = '10:00 PM';
+  
+  const tomorrowTime = (S.profile && S.profile.activeWindow) ? S.profile.activeWindow : "Tomorrow";
+  document.getElementById('tomorrow-time').textContent = tomorrowTime;
 }
 
 // =====================================================
@@ -1147,7 +1279,6 @@ document.getElementById('commit-text').addEventListener('keydown', (e) => {
 if (typeof navigator.serviceWorker !== 'undefined') {
   navigator.serviceWorker.register('sw.js')
 }
-
 
 // =====================================================
 // BOOT
