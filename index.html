@@ -564,8 +564,11 @@ function getHistory() {
 function getStreak() {
   const h = getHistory();
   let streak = 0;
-  const today = new Date().toDateString();
-  const sorted = h.filter(d => d.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
+  const seen = new Set();
+  const sorted = h
+    .filter(d => d.completed)
+    .filter(d => { if (seen.has(d.date)) return false; seen.add(d.date); return true; })
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
   for (let i = 0; i < sorted.length; i++) {
     const d = new Date(sorted[i].date);
     const expected = new Date();
@@ -613,12 +616,18 @@ function router() {
   const todayStr = now.toDateString();
 
   if (!S.today || S.today.date !== todayStr) {
-    if (S.today && S.today.date !== todayStr && !S.today.completed) {
-      addHistory({ date: S.today.date, task: S.today.task, completed: false });
-    }
     if (S.today && S.today.date !== todayStr) {
-      S.today = null;
-      save(KEYS.today, null);
+      if (!S.today.completed) {
+        // Mark as missed so the missed screen can show — don't wipe yet
+        addHistory({ date: S.today.date, task: S.today.task, completed: false });
+        S.today.missed = true;
+        S.today.date = todayStr; // prevent re-triggering on subsequent router calls
+        save(KEYS.today, S.today);
+      } else {
+        // Completed days: safe to clear
+        S.today = null;
+        save(KEYS.today, null);
+      }
     }
   }
 
@@ -1056,7 +1065,10 @@ function refreshMorningScreen() {
   document.getElementById('morning-deadline').textContent = dl.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   const ghost = getGhostText();
   const ghostEl = document.getElementById('morning-ghost');
-  if (ghost) ghostEl.textContent = `"${ghost}"`;
+  if (ghost) {
+    ghostEl.textContent = `"${ghost}"`;
+    ghostEl.style.opacity = '1';
+  }
   setUrgency(0);
 }
 
@@ -1283,6 +1295,14 @@ function closeDay() {
 // CLOSED SCREEN
 // =====================================================
 
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function refreshClosedScreen() {
   if (!S.today) return;
   const streak = getStreak();
@@ -1292,8 +1312,8 @@ function refreshClosedScreen() {
   document.getElementById('closed-msg').textContent = msgs[streak % msgs.length];
   document.getElementById('closed-summary').innerHTML = `
     <div class="label">what you did</div>
-    <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${S.today.task}"</div>
-    ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${S.today.reflection}</div>` : ''}
+    <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${escHtml(S.today.task)}"</div>
+    ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${escHtml(S.today.reflection)}</div>` : ''}
   `;
   document.getElementById('tomorrow-time').textContent = '10:00 PM';
 }
@@ -1317,7 +1337,7 @@ function refreshMissedScreen() {
 
 function missedCommit() {
   if (S.today) {
-    addHistory({ date: S.today.date, task: S.today.task, completed: false });
+    // History already logged by router when the date rolled over — don't log again
     S.today = null;
     save(KEYS.today, null);
   }
