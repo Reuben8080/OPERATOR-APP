@@ -396,8 +396,8 @@
       </div>
 
       <div>
-        <div class="escalation-box" id="active-escalation-box" style="display:none;">
-          <div class="label" style="margin-bottom:8px" id="active-escalation-header">// override signal</div>
+        <div class="escalation-box" id="active-escalation-box">
+          <div class="label" style="margin-bottom:8px" id="active-escalation-header">// focus anchor signal</div>
           <div class="escalation-text" id="active-escalation-msg"></div>
         </div>
         <div class="ghost-anchor mt16" id="active-ghost"></div>
@@ -447,7 +447,7 @@
   <div id="screen-closed" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
-      <span class="streak-badge" id="streak-closed">— day streak</span>
+      <span class="streak-badge" id="streak-closed">' day streak</span>
     </div>
 
     <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; gap:20px;">
@@ -643,12 +643,11 @@ function calcUrgency(msRemaining, totalMs) {
   const pctLeft = msRemaining / totalMs;
   const elapsed = 1 - pctLeft;
 
-  // Exponential scale mapping: Urgency escalates sharply in the final 35% of time window
-  if (elapsed < 0.35) return 0; // First phase: Calm / Focus baseline
-  if (elapsed < 0.65) return 1; // Second phase: Linear progression
-  if (elapsed < 0.80) return 2; // Third phase: Accelerating warning
-  if (elapsed < 0.92) return 3; // Danger zone: Pattern disruption threshold
-  return 4;                     // Terminal crash dive: Raw execution crisis
+  if (elapsed < 0.25) return 0; // Baseline Phase
+  if (elapsed < 0.55) return 1; // Linear Phase
+  if (elapsed < 0.75) return 2; // Warning Phase
+  if (elapsed < 0.90) return 3; // Pattern Disruption Threshold
+  return 4;                     // Crisis Phase
 }
 
 function setUrgency(level) {
@@ -676,7 +675,6 @@ let isDriftingActive = false;
 function getEscalationMsg(urgency, forcePatternDisruption = false) {
   const p = S.profile || { drift: "falling behind", stakes: "your future", override: "waking up", forward: "success" };
   
-  // High-priority state machine pattern disruption merge (Tiers 3, 4, 5, or Manual Lockout)
   if (forcePatternDisruption || urgency >= 3) {
     const disruptionPool = [
       `CRITICAL INTERVENTION: You are actively running the code that triggers "${p.drift}". Cut the loop. Execute now for ${p.stakes}.`,
@@ -688,29 +686,30 @@ function getEscalationMsg(urgency, forcePatternDisruption = false) {
     return disruptionPool[Math.floor(Math.random() * disruptionPool.length)];
   }
 
-  // Expanded baseline behaviors (Levels 1 and 2)
   const structuralPools = {
+    0: [
+      `Commitment active. Clear your physical desk and protect this execution window.`,
+      `The objective is singular: "${p.forward || 'Focus'}". Minimize switching costs.`,
+      `Your morning self locked this in. Follow the blueprint without negotiation.`,
+      `Ambient focus check: Remove your background tabs. Maintain clean vision.`
+    ],
     1: [
       `This is the exact threshold where momentum fractures. Maintain concentration.`,
       `Are you operating your timeline right now, or just watching numbers decay?`,
       `Drop secondary screens. Strip tabs. One singular line of continuous action.`,
       `Drifting starts with an innocent break in posture. Re-align your tracking right now.`,
-      `Friction is standard. Pushing past this initial chemical resistance is the entire game.`,
-      `Your current output rate does not protect your long-term goals. Tighten up.`,
-      `Do not let a low-level micro-distraction hijack this block. Stay locked.`
+      `Friction is standard. Pushing past this initial chemical resistance is the entire game.`
     ],
     2: [
       `The window is closing—no longer passively, but at an accelerating scale. Wake up.`,
       `Recognize this feeling? You have stood directly on this failure line before. Move.`,
       `Time is bleeding from your day in real-time. Action precedes motivation.`,
-      `Take a three-second physical reset, open your eyes, and dive back into the work.`,
-      `No backup squad is coming to salvage this block. This execution layer is entirely on you.`,
       `Your attention is being weaponized against you. Re-claim custody of your environment.`,
       `You are reaching the tipping point. The next five minutes determine the evening's trajectory.`
     ]
   };
 
-  const selectedPool = structuralPools[urgency] || [`Keep tracking.`];
+  const selectedPool = structuralPools[urgency] || structuralPools[0];
   return selectedPool[Math.floor(Math.random() * selectedPool.length)];
 }
 
@@ -732,7 +731,7 @@ function refreshActiveScreen() {
   isDriftingActive = false;
   
   const headerEl = document.getElementById('active-escalation-header');
-  if (headerEl) headerEl.textContent = "// override signal";
+  if (headerEl) headerEl.textContent = "// focus anchor signal";
   
   startCountdown();
 }
@@ -757,10 +756,12 @@ function startCountdown() {
     const dot = document.getElementById('active-dot');
     const driftBtn = document.getElementById('drift-btn');
 
+    // TERMINAL EXPIRATION LOCKOUT
     if (remaining <= 0) {
       if (S.timerInterval) clearInterval(S.timerInterval);
       if (S.driftTimeout) clearTimeout(S.driftTimeout);
       
+      isDriftingActive = false;
       setUrgency(5);
       if (countEl) countEl.textContent = 'TIME';
       if (subtextEl) subtextEl.textContent = 'time is up';
@@ -771,10 +772,15 @@ function startCountdown() {
         dot.classList.add('fast-pulse');
       }
       
+      // FIX: Keep box persistent when time is up; turn it into terminal view
       if (escBox) {
+        escBox.style.display = 'block';
         escBox.style.transition = 'none';
-        escBox.style.display = 'none';
+        escBox.style.opacity = '1';
       }
+      if (headerEl) headerEl.textContent = "// zero hour reached";
+      if (escMsg) escMsg.textContent = "Deadline breached. Current state defaulted to drift. Resolve immediately.";
+      
       if (driftBtn) {
         driftBtn.style.opacity = '0.3';
         driftBtn.style.pointerEvents = 'none';
@@ -788,7 +794,7 @@ function startCountdown() {
     if (urgency !== lastUrgencyLevel) {
       lastUrgencyLevel = urgency;
       if (!isDriftingActive) {
-        lastEscalationMsg = ''; // Force regeneration when changing tiers naturally
+        lastEscalationMsg = ''; 
       }
     }
 
@@ -815,26 +821,21 @@ function startCountdown() {
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
-    // NATIVE LOOP RENDER LAYER — Only runs if manual circuit breaker is open
+    // FIX: Core Ambient Render Engine — Urgency 0 now updates cleanly instead of turning off
     if (!isDriftingActive) {
-      if (headerEl) headerEl.textContent = "// override signal";
-      if (urgency >= 1) {
-        if (!lastEscalationMsg) {
-          lastEscalationMsg = getEscalationMsg(urgency, false);
-        }
-        if (escBox) {
-          escBox.style.display = 'block';
-          escBox.style.transition = 'var(--trans)';
-          escBox.style.opacity = '1';
-        }
-        if (escMsg && escMsg.textContent !== lastEscalationMsg) {
-          escMsg.textContent = lastEscalationMsg;
-        }
-      } else {
-        if (escBox) {
-          escBox.style.display = 'none';
-          escBox.style.opacity = '0';
-        }
+      if (headerEl) headerEl.textContent = urgency >= 3 ? "// target crisis signal" : "// focus anchor signal";
+      
+      if (!lastEscalationMsg || lastUrgencyLevel !== urgency) {
+        lastEscalationMsg = getEscalationMsg(urgency, false);
+      }
+      
+      if (escBox) {
+        escBox.style.display = 'block';
+        escBox.style.transition = 'var(--trans)';
+        escBox.style.opacity = '1';
+      }
+      if (escMsg && escMsg.textContent !== lastEscalationMsg) {
+        escMsg.textContent = lastEscalationMsg;
       }
     }
   }
@@ -851,7 +852,6 @@ function triggerWakeup() {
 
   isDriftingActive = true;
   
-  // Forces a deep pattern disruption sequence instantly utilizing onboarding entries
   const disruptionPayload = getEscalationMsg(S.urgency, true);
   lastEscalationMsg = disruptionPayload;
   
@@ -864,39 +864,33 @@ function triggerWakeup() {
   
   if (escBox) { 
     escBox.style.display = 'block'; 
-    escBox.style.transition = 'none'; // Strips away layout lag interpolation entirely
+    escBox.style.transition = 'none'; 
     escBox.style.opacity = '1';       
     escBox.style.transform = 'scale(1.03)';
-    escBox.offsetHeight; // Forces native DOM calculation pipeline clean reset
+    escBox.offsetHeight; 
     setTimeout(() => { escBox.style.transform = 'scale(1)'; }, 80);
   }
 
   if (S.driftTimeout) clearTimeout(S.driftTimeout);
   
-  // Un-interruptible 30-Second Disruption Window Barrier
+  // Un-interruptible 30-Second Window
   S.driftTimeout = setTimeout(() => {
     isDriftingActive = false;
-    lastEscalationMsg = ''; // Flushes cached values to allow the loop engine to update cleanly
+    lastEscalationMsg = ''; 
     
     if (!S.today) return;
     const now = new Date();
     const deadline = new Date(S.today.deadlineTime);
     const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
     const rem = deadline - now;
-    const currentUrgency = calcUrgency(rem, deadline - start);
     
-    if (currentUrgency < 1) {
-      if (escBox) {
-        escBox.style.transition = 'none';
-        escBox.style.display = 'none';
-        escBox.style.opacity = '0';
-      }
-    } else {
-      if (escBox) escBox.style.transition = 'var(--trans)'; 
-      lastEscalationMsg = getEscalationMsg(currentUrgency, false);
-      if (escMsg) escMsg.textContent = lastEscalationMsg;
-      if (headerEl) headerEl.textContent = "// override signal";
-    }
+    if (rem <= 0) return; // Let terminal check catch expiration smoothly
+    
+    const currentUrgency = calcUrgency(rem, deadline - start);
+    if (escBox) escBox.style.transition = 'var(--trans)'; 
+    lastEscalationMsg = getEscalationMsg(currentUrgency, false);
+    if (escMsg) escMsg.textContent = lastEscalationMsg;
+    if (headerEl) headerEl.textContent = currentUrgency >= 3 ? "// target crisis signal" : "// focus anchor signal";
   }, 30000); 
 }
 
@@ -1046,13 +1040,6 @@ function obNext() {
     save(KEYS.profile, S.profile);
     router();
   } else {
-    renderObQuestion();
-  }
-}
-
-function obBack() {
-  if (obStep > 0) {
-    obStep--;
     renderObQuestion();
   }
 }
@@ -1251,6 +1238,13 @@ function missedPartial() {
   save(KEYS.today, S.today);
   setUrgency(0);
   router();
+}
+
+function obBack() {
+  if (obStep > 0) {
+    obStep--;
+    renderObQuestion();
+  }
 }
 
 // =====================================================
