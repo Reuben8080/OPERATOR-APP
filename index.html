@@ -311,6 +311,26 @@
       transition: var(--trans);
     }
 
+    /* ——— URGENCY PREVIEW SWATCHES ——— */
+    .preview-swatch {
+      width: 36px; border-radius: 8px;
+      transition: all 0.3s ease;
+    }
+    #screen-preview .preview-swatch {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    #screen-preview.active .preview-swatch {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #screen-preview.active .preview-swatch:nth-child(1) { transition-delay: 0.1s; }
+    #screen-preview.active .preview-swatch:nth-child(2) { transition-delay: 0.25s; }
+    #screen-preview.active .preview-swatch:nth-child(3) { transition-delay: 0.4s; }
+    #screen-preview.active .preview-swatch:nth-child(4) { transition-delay: 0.55s; }
+    #screen-preview.active .preview-swatch:nth-child(5) { transition-delay: 0.7s; }
+    #screen-preview.active .preview-swatch:nth-child(6) { transition-delay: 0.85s; }
+
     /* ——— SWIPE HINT ——— */
     .swipe-hint { text-align: center; font-size: 10px; color: var(--text2); letter-spacing: 0.1em; margin-top: 8px; }
 
@@ -326,12 +346,11 @@
     <div class="flex1 scroll-area" style="display:flex;flex-direction:column;justify-content:center;gap:24px;padding-bottom:8px;">
       <div>
         <div class="label">before we start</div>
-        <div class="mt12 big-text serif">Have you ever known exactly what you needed to do — and watched the day disappear anyway?</div>
+        <div class="mt12 big-text serif">How often do you know exactly what needs to get done — and let the day slip anyway?</div>
       </div>
       <div class="divider"></div>
       <div style="display:flex;flex-direction:column;gap:14px;">
-        <div style="font-size:14px;line-height:1.75;color:var(--text2);">OPERATOR is for the gap between knowing and doing. Most productivity tools make lists. This one makes you account for the day.</div>
-        <div style="font-size:14px;line-height:1.75;color:var(--text2);">One commitment per session. A real deadline. An urgency engine that won't let you coast. No notifications — just a screen that changes colour as the clock runs down.</div>
+        <div style="font-size:14px;line-height:1.75;color:var(--text2);">OPERATOR is for the gap between knowing and doing. One commitment. A real deadline. An urgency engine that won't let you coast.</div>
         <div style="font-size:14px;line-height:1.75;color:var(--text2);">Best for people who already know their problem isn't information — it's follow-through.</div>
       </div>
       <div class="divider"></div>
@@ -368,6 +387,30 @@
 
     <div class="mt16 gap8">
       <button class="btn btn-primary" id="ob-next-btn">Continue →</button>
+    </div>
+  </div>
+
+  <div id="screen-preview" class="screen">
+    <div class="topbar">
+      <span class="wordmark">OPERATOR</span>
+    </div>
+    <div class="flex1" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:32px;">
+      <div style="text-align:center;">
+        <div class="big-text serif">This is what your day will feel like.</div>
+        <div class="mt12 label">watch what happens as the clock runs down</div>
+      </div>
+      <div id="preview-swatch-row" style="display:flex;gap:10px;align-items:flex-end;justify-content:center;">
+        <div class="preview-swatch" style="background:#FAFAF8;height:32px;"></div>
+        <div class="preview-swatch" style="background:#FFF8EE;height:40px;"></div>
+        <div class="preview-swatch" style="background:#FFE8D0;height:50px;"></div>
+        <div class="preview-swatch" style="background:#FF4420;height:62px;"></div>
+        <div class="preview-swatch" style="background:#8B0000;height:76px;"></div>
+        <div class="preview-swatch" style="background:#080808;height:92px;border:1px solid rgba(255,255,255,0.1);"></div>
+      </div>
+      <div class="label" style="text-align:center;opacity:0.6;">calm → urgent → time is up</div>
+    </div>
+    <div class="mt16 gap8">
+      <button class="btn btn-primary" id="preview-next-btn">Set my first commitment →</button>
     </div>
   </div>
 
@@ -930,11 +973,11 @@ function getGhostText() {
 
 const OB_QUESTIONS = [
   {
-    key: 'drift',
-    question: "What's the thing you're most trying to not repeat?",
-    sub: 'Be honest with yourself here.',
-    type: 'textarea',
-    placeholder: 'The pattern, the failure, the drift...',
+    key: 'activeWindow',
+    question: 'What time of day do you actually come alive?',
+    sub: "We'll set your default deadline around this.",
+    type: 'select',
+    options: ['Early morning (5–9am)', 'Late morning (9am–12pm)', 'Afternoon (12–5pm)', 'Evening (5–10pm)', 'Night (10pm+)'],
   },
   {
     key: 'stakes',
@@ -944,11 +987,11 @@ const OB_QUESTIONS = [
     placeholder: 'A name, a reason, or both...',
   },
   {
-    key: 'activeWindow',
-    question: 'What time of day do you actually come alive?',
-    sub: "We'll set your active window around this.",
-    type: 'select',
-    options: ['Early morning (5–9am)', 'Late morning (9am–12pm)', 'Afternoon (12–5pm)', 'Evening (5–10pm)', 'Night (10pm+)'],
+    key: 'drift',
+    question: "What's the thing you're most trying to not repeat?",
+    sub: 'Be honest with yourself here.',
+    type: 'textarea',
+    placeholder: 'The pattern, the failure, the drift...',
   },
   {
     key: 'override',
@@ -1061,7 +1104,7 @@ function obNext() {
       createdAt: new Date().toISOString(),
     };
     save(KEYS.profile, S.profile);
-    router();
+    showScreen('preview');
   } else {
     renderObQuestion();
   }
@@ -1505,10 +1548,16 @@ function refreshMissedScreen() {
   if (ghost) {
     document.getElementById('missed-ghost').textContent = `"${ghost}"`;
   }
-  document.getElementById('missed-anchor').textContent = getEscalationMsg(5);
+  const history = getHistory();
+  const missCount = history.filter(e => !e.completed).length;
   const task = S.today ? S.today.task : '';
-  if (task) {
-    document.getElementById('missed-text').textContent = `"${task}" — not today.`;
+  if (missCount <= 1) {
+    // First miss — ease them in
+    document.getElementById('missed-anchor').textContent = "That's exactly what this app is for. You'll know what to do tomorrow.";
+    if (task) document.getElementById('missed-text').textContent = `"${task}" — not today.`;
+  } else {
+    document.getElementById('missed-anchor').textContent = getEscalationMsg(5);
+    if (task) document.getElementById('missed-text').textContent = `"${task}" — not today.`;
   }
 }
 
@@ -1582,6 +1631,7 @@ document.getElementById('welcome-start-btn').addEventListener('click', () => {
   initOnboarding();
   showScreen('onboarding');
 });
+document.getElementById('preview-next-btn').addEventListener('click', () => { showScreen('commit'); refreshCommitScreen(); });
 document.getElementById('commit-btn').addEventListener('click', submitCommit);
 document.getElementById('morning-open-btn').addEventListener('click', openCommitment);
 document.getElementById('witness-share-btn').addEventListener('click', shareWithWitness);
