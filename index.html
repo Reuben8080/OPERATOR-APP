@@ -70,11 +70,6 @@
     .screen { display: none; height: 100%; flex-direction: column; animation: fadeIn 0.5s ease; }
     .screen.active { display: flex; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    
-    @keyframes fadeOut { 
-      from { opacity: 1; transform: translateY(0); } 
-      to { opacity: 0; transform: translateY(8px); } 
-    }
 
     /* ——— TYPOGRAPHY ——— */
     .serif { font-family: 'Instrument Serif', serif; }
@@ -267,7 +262,7 @@
       border-radius: 50%; background: var(--accent);
       display: flex; align-items: center; justify-content: center;
       margin: 0 auto;
-      animation: completionGlow 3s forwards cubic-bezier(0.4, 0, 0.2, 1);
+      animation: completionGlow 3s ease forwards;
     }
     .glyph-inner {
       font-size: 48px; line-height: 1;
@@ -300,33 +295,6 @@
 
     /* ——— SWIPE HINT ——— */
     .swipe-hint { text-align: center; font-size: 10px; color: var(--text2); letter-spacing: 0.1em; margin-top: 8px; }
-
-    /* ——— BLACKOUT SCREEN ——— */
-    #screen-blackout {
-      background: #000 !important;
-      color: #FFF !important;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      z-index: 9999;
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      padding: 40px;
-    }
-    
-    .traumatic-text {
-      font-family: 'Instrument Serif', serif;
-      font-size: clamp(32px, 8vw, 48px);
-      line-height: 1.2;
-      opacity: 0;
-      color: #FFF;
-      animation: slowFadeIn 3s ease forwards;
-    }
-
-    @keyframes slowFadeIn {
-      0% { opacity: 0; transform: scale(0.95); }
-      100% { opacity: 1; transform: scale(1); }
-    }
 
   </style>
 </head>
@@ -497,7 +465,7 @@
 
       <div style="opacity:0.5">
         <div class="label">tomorrow opens at</div>
-        <div class="mt8 mono" style="font-size:22px" id="tomorrow-time"></div>
+        <div class="mt8 mono" style="font-size:22px" id="tomorrow-time">10:00 PM</div>
       </div>
     </div>
 
@@ -531,12 +499,6 @@
     </div>
   </div>
 
-  <div id="screen-blackout" class="screen">
-    <div class="flex1" style="display:flex; flex-direction:column; justify-content:center; align-items:center;">
-      <div class="traumatic-text" id="blackout-msg"></div>
-    </div>
-  </div>
-
 </div>
 
 <script>
@@ -550,17 +512,14 @@ const S = {
   currentScreen: null,
   urgency: 0,
   timerInterval: null,
-  blackoutTriggered: false
 };
 
-// LocalStorage keys
 const KEYS = {
   profile: 'op_profile_v2',
   today: 'op_today_v2',
   history: 'op_history_v2',
 };
 
-// Load state
 function load() {
   try { S.profile = JSON.parse(localStorage.getItem(KEYS.profile)); } catch(e) { S.profile = null; }
   try { S.today = JSON.parse(localStorage.getItem(KEYS.today)); } catch(e) { S.today = null; }
@@ -576,30 +535,15 @@ function getHistory() {
 
 function getStreak() {
   const h = getHistory();
-  if (h.length === 0) return 0;
-  
   let streak = 0;
   const today = new Date().toDateString();
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toDateString();
-  
-  // Find out where to start counting from
-  let currentExpected = new Date(h[0].date);
-  
-  // If the most recent history item isn't today or yesterday, the streak is broken
-  if (currentExpected.toDateString() !== today && currentExpected.toDateString() !== yesterdayStr) {
-    return 0;
-  }
-  
-  for (let i = 0; i < h.length; i++) {
-    const d = new Date(h[i].date);
-    if (d.toDateString() === currentExpected.toDateString()) {
-      if (h[i].completed) streak++;
-      currentExpected.setDate(currentExpected.getDate() - 1); // roll back one day
-    } else {
-      break;
-    }
+  const sorted = h.filter(d => d.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
+  for (let i = 0; i < sorted.length; i++) {
+    const d = new Date(sorted[i].date);
+    const expected = new Date();
+    expected.setDate(expected.getDate() - i);
+    if (d.toDateString() === expected.toDateString()) streak++;
+    else break;
   }
   return streak;
 }
@@ -612,7 +556,7 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
   S.currentScreen = id;
-  if (S.timerInterval && id !== 'active') { clearInterval(S.timerInterval); S.timerInterval = null; }
+  if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
 }
 
 function router() {
@@ -627,21 +571,11 @@ function router() {
   const now = new Date();
   const todayStr = now.toDateString();
 
-  // If today's entry doesn't exist or is from yesterday
   if (!S.today || S.today.date !== todayStr) {
+    if (S.today && S.today.date !== todayStr && !S.today.completed) {
+      addHistory({ date: S.today.date, task: S.today.task, completed: false });
+    }
     if (S.today && S.today.date !== todayStr) {
-      if (!S.today.completed) {
-        // Mark as missed in history
-        addHistory({ date: S.today.date, task: S.today.task, completed: false });
-      } else if (!S.today.dayClosed) {
-        // Safeguard: Auto-close completed days that crossed midnight so progress isn't lost
-        addHistory({ 
-          date: S.today.date, 
-          task: S.today.task, 
-          completed: true, 
-          reflection: S.today.reflection || "Auto-closed past midnight." 
-        });
-      }
       S.today = null;
       save(KEYS.today, null);
     }
@@ -676,7 +610,6 @@ function router() {
     return;
   }
 
-  // Active — check if overdue
   const deadline = new Date(S.today.deadlineTime);
   if (now > deadline && !S.today.completed) {
     if (now.toDateString() === todayStr) {
@@ -698,21 +631,22 @@ function router() {
 function addHistory(entry) {
   const h = getHistory();
   h.unshift(entry);
-  save(KEYS.history, h.slice(0, 90)); // keep 90 days
+  save(KEYS.history, h.slice(0, 90));
 }
 
 // =====================================================
-// URGENCY ENGINE
+// URGENCY ENGINE (Ratio-scaled fixed build)
 // =====================================================
 
 function calcUrgency(msRemaining, totalMs) {
   if (!S.today || !S.today.started) return 0;
   if (msRemaining <= 0) return 5;
+  
   const pct = msRemaining / totalMs;
   if (pct > 0.75) return 0;
   if (pct > 0.5) return 1;
   if (pct > 0.25) return 2;
-  if (msRemaining > 30 * 60 * 1000) return 3;
+  if (pct > 0.10) return 3; // Fixed absolute crash bug -> maps to 10% remaining
   if (msRemaining > 0) return 4;
   return 5;
 }
@@ -721,7 +655,6 @@ function setUrgency(level) {
   if (S.urgency === level) return;
   S.urgency = level;
   document.body.setAttribute('data-urgency', level);
-  // Update theme-color meta
   const colors = ['#FAFAF8','#FFF8EE','#FFE8D0','#FF4420','#8B0000','#080808'];
   document.getElementById('tc').setAttribute('content', colors[level] || '#FAFAF8');
 }
@@ -844,13 +777,9 @@ function renderObQuestion() {
     inputHtml = `<textarea class="input-field" id="ob-input" rows="3" placeholder="${q.placeholder}">${obAnswers[q.key] || ''}</textarea>`;
   } else if (q.type === 'text') {
     inputHtml = `<input type="text" class="input-field" id="ob-input" placeholder="${q.placeholder}" value="${obAnswers[q.key] || ''}" style="font-size:18px;padding:16px 18px;">`;
-  } else if (q.type === 'select') {
+  } else if (q.type === 'select' || q.type === 'chips') {
     inputHtml = `<div class="override-options" id="ob-chips">
-      ${q.options.map((o, i) => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
-    </div>`;
-  } else if (q.type === 'chips') {
-    inputHtml = `<div class="override-options" id="ob-chips">
-      ${q.options.map(o => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
+      ${q.options.map((o) => `<button class="override-chip${obAnswers[q.key] === o ? ' selected' : ''}" data-val="${o}" onclick="selectChip(this,'${q.key}')">${o}</button>`).join('')}
     </div>`;
   }
 
@@ -861,7 +790,6 @@ function renderObQuestion() {
     <div class="mt20">${inputHtml}</div>
   `;
 
-  // Autofocus text inputs
   setTimeout(() => {
     const inp = document.getElementById('ob-input');
     if (inp) inp.focus();
@@ -943,13 +871,11 @@ function submitCommit() {
   const deadline = new Date(today);
   deadline.setHours(h, m, 0, 0);
 
-  // If deadline has already passed for today, set for tomorrow
   if (deadline < today) deadline.setDate(deadline.getDate() + 1);
 
   S.today = {
     date: today.toDateString(),
     task,
-    creationTime: today.toISOString(),
     deadlineTime: deadline.toISOString(),
     startTime: null,
     started: false,
@@ -962,7 +888,6 @@ function submitCommit() {
   };
 
   save(KEYS.today, S.today);
-  // Clear inputs
   document.getElementById('commit-text').value = '';
   document.getElementById('commit-witness').value = '';
   router();
@@ -992,10 +917,9 @@ function openCommitment() {
 }
 
 // =====================================================
-// ACTIVE SCREEN — COUNTDOWN
+// ACTIVE SCREEN — COUNTDOWN SEQUENCE (Stabilized)
 // =====================================================
 
-let lastEscalationMsg = '';
 let wakeupTimeout = null;
 let isWakeupActive = false;
 
@@ -1009,32 +933,6 @@ function refreshActiveScreen() {
   startCountdown();
 }
 
-function triggerBlackout() {
-  document.body.style.transition = 'background 2s ease';
-  document.body.style.background = '#000';
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  
-  const blackoutScreen = document.getElementById('screen-blackout');
-  blackoutScreen.classList.add('active');
-  
-  // Use personalized trauma text if available
-  const textElement = document.getElementById('blackout-msg');
-  if (S.profile && S.profile.drift) {
-    textElement.textContent = `You let "${S.profile.drift}" win.`;
-  } else {
-    textElement.textContent = "Time expired. You drifted.";
-  }
-  
-  // 10 second reset
-  setTimeout(() => {
-    S.today.missed = true;
-    save(KEYS.today, S.today);
-    S.blackoutTriggered = false;
-    document.body.style.transition = 'var(--trans)';
-    router();
-  }, 10000);
-}
-
 function startCountdown() {
   if (S.timerInterval) clearInterval(S.timerInterval);
 
@@ -1042,13 +940,12 @@ function startCountdown() {
     if (!S.today) return;
     const now = new Date();
     const deadline = new Date(S.today.deadlineTime);
-    
-    // Anchor total duration off the commitment's creation time so urgency doesn't reset when started late
-    const start = S.today.creationTime ? new Date(S.today.creationTime) : new Date(S.today.date);
-    
+    const start = S.today.startTime ? new Date(S.today.startTime) : new Date(S.today.date);
     const totalMs = deadline - start;
     const remaining = deadline - now;
 
+    // Save previous urgency before computing the loop transition step
+    const oldUrgency = S.urgency;
     const urgency = calcUrgency(remaining, totalMs);
     setUrgency(urgency);
 
@@ -1062,14 +959,6 @@ function startCountdown() {
     if (remaining <= 0) {
       countEl.textContent = 'TIME';
       if (dot) dot.classList.add('fast-pulse');
-      
-      // Dramatic ending sequence
-      if (!S.blackoutTriggered && !S.today.completed) {
-        S.blackoutTriggered = true;
-        clearInterval(S.timerInterval);
-        triggerBlackout();
-        return;
-      }
     } else {
       const h = Math.floor(remaining / 3600000);
       const min = Math.floor((remaining % 3600000) / 60000);
@@ -1081,37 +970,28 @@ function startCountdown() {
       }
     }
 
-    // Progress bar
     const pct = Math.max(0, Math.min(100, (1 - remaining/totalMs) * 100));
     if (progressEl) progressEl.style.width = pct + '%';
 
-    // Subtext
     const labels = ['on track', 'keep moving', 'pick up pace', 'this is urgent', 'drop everything', 'time is up'];
     if (subtextEl) subtextEl.textContent = labels[urgency] || 'in progress';
 
-    // Dot animation
     if (dot) {
       dot.classList.remove('pulsing', 'fast-pulse');
       if (urgency >= 4) dot.classList.add('fast-pulse');
       else if (urgency >= 2) dot.classList.add('pulsing');
     }
 
-    // Escalation message logic
+    // Only swap background text strings on true level transitions 
     if (urgency >= 1) {
-      if (!lastEscalationMsg || urgency > S.urgency - 1) {
-        lastEscalationMsg = getEscalationMsg(urgency);
-      }
-      if (escBox) { 
-        escBox.style.display = 'block'; 
-        // Clear fade-out animations if real urgency kicks in
+      if (urgency !== oldUrgency || !lastEscalationMsg) {
         if (!isWakeupActive) {
-          escBox.style.animation = 'none';
-          escBox.style.opacity = '1';
+          lastEscalationMsg = getEscalationMsg(urgency);
         }
       }
-      if (escMsg) escMsg.textContent = lastEscalationMsg;
+      if (escBox && !isWakeupActive) { escBox.style.display = 'block'; }
+      if (escMsg && !isWakeupActive) { escMsg.textContent = lastEscalationMsg; }
     } else {
-      // Only hide the box if the user hasn't triggered a manual drifting alert
       if (escBox && !isWakeupActive) escBox.style.display = 'none';
     }
   }
@@ -1131,34 +1011,29 @@ function markDone() {
 }
 
 function triggerWakeup() {
+  // Pull a fresh wake message matching the active escalation tier
   lastEscalationMsg = getEscalationMsg(Math.max(1, S.urgency));
   const escMsg = document.getElementById('active-escalation-msg');
   const escBox = document.getElementById('active-escalation-box');
   
   if (escMsg) escMsg.textContent = lastEscalationMsg;
   if (escBox) { 
+    isWakeupActive = true;
     escBox.style.display = 'block'; 
-    escBox.style.opacity = '1';
-    escBox.style.animation = 'fadeIn 0.4s ease forwards'; 
+    
+    // Clear old layout animations to enforce full entry sequence reflow
+    escBox.style.animation = 'none';
+    void escBox.offsetWidth; 
+    escBox.style.animation = 'fadeIn 0.4s ease'; 
   }
-
-  // Tell the tick() function to leave the box alone
-  isWakeupActive = true;
-  clearTimeout(wakeupTimeout);
   
-  // Keep on screen for 14 seconds, then trigger a 1-second fade out
+  // Set a 14-second layout lock so ticker doesn't instantly collapse it
+  if (wakeupTimeout) clearTimeout(wakeupTimeout);
   wakeupTimeout = setTimeout(() => {
-    if (escBox && S.urgency < 1) {
-      escBox.style.animation = 'fadeOut 1s ease forwards';
-      
-      // Wait for animation to finish before hiding it completely
-      setTimeout(() => {
-        isWakeupActive = false;
-        escBox.style.display = 'none';
-      }, 1000);
-    } else {
-      // If time is low enough that urgency is 1+, let tick() handle it natively
-      isWakeupActive = false; 
+    isWakeupActive = false;
+    // Safely hide the warning interface only if base urgency has cleared
+    if (S.urgency === 0 && escBox) {
+      escBox.style.display = 'none';
     }
   }, 14000);
 }
@@ -1210,9 +1085,7 @@ function refreshClosedScreen() {
     <div class="mt8" style="font-family:'Instrument Serif',serif;font-size:17px;line-height:1.4;">"${S.today.task}"</div>
     ${S.today.reflection ? `<div class="label mt12">how it went</div><div class="mt4" style="font-size:13px;color:var(--text2);">${S.today.reflection}</div>` : ''}
   `;
-  
-  const tomorrowTime = (S.profile && S.profile.activeWindow) ? S.profile.activeWindow : "Tomorrow";
-  document.getElementById('tomorrow-time').textContent = tomorrowTime;
+  document.getElementById('tomorrow-time').textContent = '10:00 PM';
 }
 
 // =====================================================
@@ -1267,22 +1140,17 @@ document.getElementById('commit-tomorrow-btn').addEventListener('click', () => {
 document.getElementById('missed-commit-btn').addEventListener('click', missedCommit);
 document.getElementById('missed-partial-btn').addEventListener('click', missedPartial);
 
-// Allow Enter key in commit field
 document.getElementById('commit-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitCommit(); }
 });
 
 // =====================================================
-// SERVICE WORKER
+// SERVICE WORKER & INITIALIZATION
 // =====================================================
 
 if (typeof navigator.serviceWorker !== 'undefined') {
   navigator.serviceWorker.register('sw.js')
 }
-
-// =====================================================
-// BOOT
-// =====================================================
 
 router();
 </script>
