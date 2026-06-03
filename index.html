@@ -301,7 +301,6 @@
 <body>
 <div id="app">
 
-  <!-- ===== SCREEN: ONBOARDING ===== -->
   <div id="screen-onboarding" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -318,7 +317,6 @@
     </div>
   </div>
 
-  <!-- ===== SCREEN: COMMIT (night before) ===== -->
   <div id="screen-commit" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -350,7 +348,6 @@
     </div>
   </div>
 
-  <!-- ===== SCREEN: MORNING ===== -->
   <div id="screen-morning" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -379,7 +376,6 @@
     </div>
   </div>
 
-  <!-- ===== SCREEN: ACTIVE (countdown running) ===== -->
   <div id="screen-active" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -418,7 +414,6 @@
     </div>
   </div>
 
-  <!-- ===== SCREEN: COMPLETE ===== -->
   <div id="screen-complete" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -452,7 +447,6 @@
     </div>
   </div>
 
-  <!-- ===== SCREEN: DAY CLOSED ===== -->
   <div id="screen-closed" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -480,7 +474,6 @@
     </div>
   </div>
 
-  <!-- ===== SCREEN: MISSED (no completion) ===== -->
   <div id="screen-missed" class="screen">
     <div class="topbar">
       <span class="wordmark">OPERATOR</span>
@@ -726,7 +719,7 @@ function getGhostText() {
 const OB_QUESTIONS = [
   {
     key: 'drift',
-    question: 'What's the thing you're most trying to not repeat?',
+    question: "What's the thing you're most trying to not repeat?",
     sub: 'Be honest with yourself here.',
     type: 'textarea',
     placeholder: 'The pattern, the failure, the drift...',
@@ -741,7 +734,7 @@ const OB_QUESTIONS = [
   {
     key: 'activeWindow',
     question: 'What time of day do you actually come alive?',
-    sub: 'We'll set your active window around this.',
+    sub: "We'll set your active window around this.",
     type: 'select',
     options: ['Early morning (5–9am)', 'Late morning (9am–12pm)', 'Afternoon (12–5pm)', 'Evening (5–10pm)', 'Night (10pm+)'],
   },
@@ -755,7 +748,7 @@ const OB_QUESTIONS = [
   {
     key: 'forward',
     question: 'In 5 years — what does the version of you look like that made it?',
-    sub: 'One sentence. Don't be modest.',
+    sub: "Don't be modest.",
     type: 'text',
     placeholder: 'That version of me is...',
   },
