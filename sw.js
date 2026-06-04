@@ -1,4 +1,4 @@
-const CACHE_NAME = 'operator-v1';
+const CACHE_NAME = 'operator-v2';
 
 const PRECACHE_ASSETS = [
     '/',
