@@ -429,6 +429,14 @@
       </div>
 
       <div class="mt16 gap8">
+        <div class="label">for</div>
+        <select class="input-small" id="commit-day">
+          <option value="today">Today</option>
+          <option value="tomorrow">Tomorrow</option>
+        </select>
+      </div>
+
+      <div class="mt16 gap8">
         <div class="label">complete by</div>
         <input type="time" class="input-small" id="commit-time" value="17:00">
       </div>
@@ -754,16 +762,25 @@ function router() {
   const now = new Date();
   const todayStr = now.toDateString();
 
-  if (!S.today || S.today.date !== todayStr) {
-    if (S.today && S.today.date !== todayStr) {
+  // Only treat a commitment as "rolled over" once we're past the calendar day
+  // its deadline falls on — not just because it was created on an earlier date.
+  // (A commitment made tonight with tomorrow's deadline must survive the midnight
+  // rollover untouched until tomorrow's deadline itself has passed.)
+  const deadlineDayPassed = S.today &&
+    new Date(todayStr) > new Date(new Date(S.today.deadlineTime).toDateString());
+
+  if (!S.today || deadlineDayPassed) {
+    if (S.today && deadlineDayPassed) {
       if (!S.today.completed) {
-        // Mark as missed so the missed screen can show — don't wipe yet
-        const _missedEntry = { date: S.today.date, task: S.today.task, completed: false };
-        addHistory(_missedEntry);
-        S.today.missed = true;
-        S.today._historyId = _missedEntry.id;
-        S.today.date = todayStr; // prevent re-triggering on subsequent router calls
-        save(KEYS.today, S.today);
+        if (!S.today.missed) {
+          // Mark as missed so the missed screen can show — don't wipe yet
+          const _missedEntry = { date: S.today.date, task: S.today.task, completed: false };
+          addHistory(_missedEntry);
+          S.today.missed = true;
+          S.today._historyId = _missedEntry.id;
+          S.today.date = todayStr; // keep date fresh now that it's genuinely stale
+          save(KEYS.today, S.today);
+        }
       } else {
         // Completed days: safe to clear
         S.today = null;
@@ -1169,7 +1186,7 @@ function obNext() {
 // COMMIT SCREEN
 // =====================================================
 
-function refreshCommitScreen() {
+function refreshCommitScreen(defaultDay) {
   const streak = getStreak();
   document.getElementById('streak-commit').textContent = streak > 0 ? `${streak} day streak` : '—';
   // Adjust framing based on time of day so mid-morning commits don't say "tonight"
@@ -1201,11 +1218,18 @@ function refreshCommitScreen() {
     const mapped = windowMap[S.profile.activeWindow];
     if (mapped) timeInput.value = mapped;
   }
+  // Explicit today/tomorrow selector — defaults to a guess based on time of day,
+  // but callers can force it (e.g. the "tomorrow" buttons pass 'tomorrow')
+  const dayInput = document.getElementById('commit-day');
+  if (dayInput) {
+    dayInput.value = defaultDay || ((hour >= 17 || hour < 5) ? 'tomorrow' : 'today');
+  }
 }
 
 function submitCommit() {
   const task = document.getElementById('commit-text').value.trim();
   const timeVal = document.getElementById('commit-time').value || '17:00';
+  const dayVal = (document.getElementById('commit-day') || {}).value || 'today';
   const witness = document.getElementById('commit-witness').value.trim();
 
   if (!task) {
@@ -1219,7 +1243,13 @@ function submitCommit() {
   const deadline = new Date(today);
   deadline.setHours(h, m, 0, 0);
 
-  if (deadline < today) deadline.setDate(deadline.getDate() + 1);
+  if (dayVal === 'tomorrow') {
+    // Explicitly requested — always push a day, regardless of what time was picked
+    deadline.setDate(deadline.getDate() + 1);
+  } else if (deadline < today) {
+    // "Today" selected but the time already passed — safety net, same as before
+    deadline.setDate(deadline.getDate() + 1);
+  }
 
   S.today = {
     date: today.toDateString(),
@@ -1661,7 +1691,7 @@ function missedCommit() {
   }
   setUrgency(0);
   showScreen('commit');
-  refreshCommitScreen();
+  refreshCommitScreen('tomorrow');
 }
 
 function missedPartial() {
@@ -1736,7 +1766,7 @@ document.getElementById('witness-share-btn').addEventListener('click', shareWith
 document.getElementById('done-btn').addEventListener('click', markDone);
 document.getElementById('drift-btn').addEventListener('click', triggerWakeup);
 document.getElementById('close-day-btn').addEventListener('click', closeDay);
-document.getElementById('commit-tomorrow-btn').addEventListener('click', () => { showScreen('commit'); refreshCommitScreen(); });
+document.getElementById('commit-tomorrow-btn').addEventListener('click', () => { showScreen('commit'); refreshCommitScreen('tomorrow'); });
 document.getElementById('view-history-btn').addEventListener('click', () => showHistoryScreen('closed'));
 document.getElementById('history-back-btn').addEventListener('click', () => {
   const ret = S._historyReturn || 'closed';
